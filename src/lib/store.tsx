@@ -18,7 +18,9 @@ import {
   FundedAccountPurchase,
   BotTemplate,
   SignalTemplate,
-  Wallet } from
+  CopyTradeTemplate,
+  Wallet,
+  BankAccount } from
 './types';
 import { generateId, randomPriceChange } from './utils';
 // Initial Market Data (Extended with 80+ pairs)
@@ -125,7 +127,9 @@ interface StoreContextType {
   purchasedFundedAccounts: FundedAccountPurchase[];
   botTemplates: BotTemplate[];
   signalTemplates: SignalTemplate[];
+  copyTradeTemplates: CopyTradeTemplate[];
   wallets: Wallet[];
+  bankAccounts: BankAccount[];
   isAuthenticated: boolean;
   botActive: boolean;
   login: (email: string, password?: string) => { success: boolean; isAdmin?: boolean; error?: string };
@@ -171,12 +175,21 @@ interface StoreContextType {
   editBotTemplate: (botId: string, updates: Partial<BotTemplate>) => void;
   deleteBotTemplate: (botId: string) => void;
   // Signal Template Methods
-  addSignalTemplate: (providerName: string, description: string, cost: number, winRate: number, trades: number, avgReturn: number) => void;
+  addSignalTemplate: (providerName: string, description: string, symbol: string, confidence: number, followers: number, cost: number, winRate: number, trades: number, avgReturn: number) => void;
   editSignalTemplate: (signalId: string, updates: Partial<SignalTemplate>) => void;
   deleteSignalTemplate: (signalId: string) => void;
+  // Copy Trade Template Methods
+  addCopyTradeTemplate: (name: string, description: string, winRate: number, return_: number, followers: number, risk: 'Low' | 'Medium' | 'High', dailyReturn: number, trades: number) => void;
+  editCopyTradeTemplate: (copyTradeId: string, updates: Partial<CopyTradeTemplate>) => void;
+  deleteCopyTradeTemplate: (copyTradeId: string) => void;
   // Wallet Methods
   addWallet: (userId: string, address: string, label: string, type: 'DEPOSIT' | 'PURCHASE', currency: string, network?: string) => void;
   removeWallet: (walletId: string) => void;
+  // Bank Account Methods
+  addBankAccount: (accountName: string, accountNumber: string, bankName: string, routingNumber: string, accountType: 'CHECKING' | 'SAVINGS', currency: string, country: string, type: 'DEPOSIT' | 'WITHDRAWAL', swiftCode?: string, iban?: string) => void;
+  editBankAccount: (accountId: string, updates: Partial<BankAccount>) => void;
+  removeBankAccount: (accountId: string) => void;
+  toggleBankAccountStatus: (accountId: string) => void;
   // Admin Methods
   addBalance: (userId: string, amount: number) => void;
   removeBalance: (userId: string, amount: number) => void;
@@ -203,7 +216,9 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
   const [purchasedFundedAccounts, setPurchasedFundedAccounts] = useState<FundedAccountPurchase[]>([]);
   const [botTemplates, setBotTemplates] = useState<BotTemplate[]>([]);
   const [signalTemplates, setSignalTemplates] = useState<SignalTemplate[]>([]);
+  const [copyTradeTemplates, setCopyTradeTemplates] = useState<CopyTradeTemplate[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   // Account State
   const [account, setAccount] = useState<Account>({
     balance: 10000,
@@ -1151,12 +1166,15 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
   };
 
   // Signal Template Methods
-  const addSignalTemplate = (providerName: string, description: string, cost: number, winRate: number, trades: number, avgReturn: number) => {
+  const addSignalTemplate = (providerName: string, description: string, symbol: string, confidence: number, followers: number, cost: number, winRate: number, trades: number, avgReturn: number) => {
     if (!user) return;
     const newSignal: SignalTemplate = {
       id: generateId(),
       providerName,
       description,
+      symbol,
+      confidence,
+      followers,
       cost,
       winRate,
       trades,
@@ -1185,6 +1203,43 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
     alert('✅ Signal template deleted');
   };
 
+  // Copy Trade Template Methods
+  const addCopyTradeTemplate = (name: string, description: string, winRate: number, return_: number, followers: number, risk: 'Low' | 'Medium' | 'High', dailyReturn: number, trades: number) => {
+    if (!user) return;
+    const newCopyTrade: CopyTradeTemplate = {
+      id: generateId(),
+      name,
+      description,
+      winRate,
+      return: return_,
+      followers,
+      risk,
+      dailyReturn,
+      trades,
+      createdBy: user.id,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    setCopyTradeTemplates((prev) => [...prev, newCopyTrade]);
+    alert('✅ Copy trade template created');
+  };
+
+  const editCopyTradeTemplate = (copyTradeId: string, updates: Partial<CopyTradeTemplate>) => {
+    setCopyTradeTemplates((prev) =>
+      prev.map((ct) =>
+        ct.id === copyTradeId
+          ? { ...ct, ...updates, updatedAt: Date.now() }
+          : ct
+      )
+    );
+    alert('✅ Copy trade template updated');
+  };
+
+  const deleteCopyTradeTemplate = (copyTradeId: string) => {
+    setCopyTradeTemplates((prev) => prev.filter((ct) => ct.id !== copyTradeId));
+    alert('✅ Copy trade template deleted');
+  };
+
   // Wallet Methods
   const addWallet = (userId: string, address: string, label: string, type: 'DEPOSIT' | 'PURCHASE', currency: string, network?: string) => {
     const newWallet: Wallet = {
@@ -1206,13 +1261,61 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
     alert('✅ Wallet removed');
   };
 
+  // Bank Account Methods
+  const addBankAccount = (accountName: string, accountNumber: string, bankName: string, routingNumber: string, accountType: 'CHECKING' | 'SAVINGS', currency: string, country: string, type: 'DEPOSIT' | 'WITHDRAWAL', swiftCode?: string, iban?: string) => {
+    const newAccount: BankAccount = {
+      id: generateId(),
+      accountName,
+      accountNumber,
+      bankName,
+      routingNumber,
+      swiftCode,
+      iban,
+      accountType,
+      currency,
+      country,
+      type,
+      isActive: true,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    setBankAccounts((prev) => [...prev, newAccount]);
+    alert('✅ Bank account added successfully');
+  };
+
+  const editBankAccount = (accountId: string, updates: Partial<BankAccount>) => {
+    setBankAccounts((prev) =>
+      prev.map((account) =>
+        account.id === accountId
+          ? { ...account, ...updates, updatedAt: Date.now() }
+          : account
+      )
+    );
+    alert('✅ Bank account updated successfully');
+  };
+
+  const removeBankAccount = (accountId: string) => {
+    setBankAccounts((prev) => prev.filter((a) => a.id !== accountId));
+    alert('✅ Bank account removed');
+  };
+
+  const toggleBankAccountStatus = (accountId: string) => {
+    setBankAccounts((prev) =>
+      prev.map((account) =>
+        account.id === accountId
+          ? { ...account, isActive: !account.isActive, updatedAt: Date.now() }
+          : account
+      )
+    );
+  };
+
   // Copy Trading Methods
   const followTrader = (trader: any, allocation: number, durationValue: string, durationType: 'hours' | 'days') => {
     if (!user) return;
     const newCopy: CopyTrade = {
       id: generateId(),
       userId: user.id,
-      tradesId: Date.now(),
+      tradesId: trader?.id || Date.now(),
       traderName: trader?.name || 'Unknown',
       allocation,
       status: 'ACTIVE',
@@ -1425,7 +1528,9 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
         purchasedFundedAccounts,
         botTemplates,
         signalTemplates,
+        copyTradeTemplates,
         wallets,
+        bankAccounts,
         isAuthenticated: !!user,
         botActive,
         login,
@@ -1462,8 +1567,15 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
         addSignalTemplate,
         editSignalTemplate,
         deleteSignalTemplate,
+        addCopyTradeTemplate,
+        editCopyTradeTemplate,
+        deleteCopyTradeTemplate,
         addWallet,
         removeWallet,
+        addBankAccount,
+        editBankAccount,
+        removeBankAccount,
+        toggleBankAccountStatus,
         addBalance,
         removeBalance,
         togglePageLock,

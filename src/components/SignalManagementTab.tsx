@@ -4,7 +4,7 @@ import { SignalTemplate } from '../lib/types';
 
 interface SignalManagementTabProps {
   signalTemplates: SignalTemplate[];
-  addSignalTemplate: (providerName: string, description: string, cost: number, winRate: number, trades: number, avgReturn: number) => void;
+  addSignalTemplate: (providerName: string, description: string, symbol: string, confidence: number, followers: number, cost: number, winRate: number, trades: number, avgReturn: number) => void;
   editSignalTemplate: (signalId: string, updates: Partial<SignalTemplate>) => void;
   deleteSignalTemplate: (signalId: string) => void;
 }
@@ -19,6 +19,9 @@ export function SignalManagementTabComponent({
   const [signalForm, setSignalForm] = useState({
     providerName: '',
     description: '',
+    symbol: '',
+    confidence: '',
+    followers: '',
     cost: '',
     winRate: '',
     trades: '',
@@ -34,11 +37,14 @@ export function SignalManagementTabComponent({
 
   const handleAddSignal = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (signalForm.providerName && signalForm.cost && signalForm.winRate && signalForm.trades && signalForm.avgReturn) {
+    if (signalForm.providerName && signalForm.symbol && signalForm.confidence && signalForm.followers && signalForm.cost && signalForm.winRate && signalForm.trades && signalForm.avgReturn) {
       if (editingSignalId) {
         editSignalTemplate(editingSignalId, {
           providerName: signalForm.providerName,
           description: signalForm.description,
+          symbol: signalForm.symbol,
+          confidence: parseFloat(signalForm.confidence),
+          followers: parseFloat(signalForm.followers),
           cost: parseFloat(signalForm.cost),
           winRate: parseFloat(signalForm.winRate),
           trades: parseFloat(signalForm.trades),
@@ -49,6 +55,9 @@ export function SignalManagementTabComponent({
         addSignalTemplate(
           signalForm.providerName,
           signalForm.description,
+          signalForm.symbol,
+          parseFloat(signalForm.confidence),
+          parseFloat(signalForm.followers),
           parseFloat(signalForm.cost),
           parseFloat(signalForm.winRate),
           parseFloat(signalForm.trades),
@@ -63,6 +72,9 @@ export function SignalManagementTabComponent({
     setSignalForm({
       providerName: '',
       description: '',
+      symbol: '',
+      confidence: '',
+      followers: '',
       cost: '',
       winRate: '',
       trades: '',
@@ -75,6 +87,9 @@ export function SignalManagementTabComponent({
     setSignalForm({
       providerName: signal.providerName,
       description: signal.description,
+      symbol: signal.symbol,
+      confidence: signal.confidence.toString(),
+      followers: signal.followers.toString(),
       cost: signal.cost.toString(),
       winRate: signal.winRate.toString(),
       trades: signal.trades.toString(),
@@ -157,6 +172,44 @@ export function SignalManagementTabComponent({
         </div>
 
         <div>
+          <label className="text-xs text-[#8b949e] uppercase mb-2 block">Trading Pair / Symbol</label>
+          <input
+            type="text"
+            placeholder="EURUSD"
+            value={signalForm.symbol}
+            onChange={(e) => updateFormField('symbol', e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddSignal(e as any)}
+            className="w-full px-4 py-2 bg-[#0d1117] border border-[#21262d] text-white rounded-lg focus:outline-none focus:border-[#2962ff] transition-colors"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs text-[#8b949e] uppercase mb-2 block">Confidence Level (0-100)</label>
+          <input
+            type="number"
+            placeholder="85"
+            min="0"
+            max="100"
+            value={signalForm.confidence}
+            onChange={(e) => updateFormField('confidence', e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddSignal(e as any)}
+            className="w-full px-4 py-2 bg-[#0d1117] border border-[#21262d] text-white rounded-lg focus:outline-none focus:border-[#2962ff] transition-colors"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs text-[#8b949e] uppercase mb-2 block">Followers</label>
+          <input
+            type="number"
+            placeholder="1250"
+            value={signalForm.followers}
+            onChange={(e) => updateFormField('followers', e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddSignal(e as any)}
+            className="w-full px-4 py-2 bg-[#0d1117] border border-[#21262d] text-white rounded-lg focus:outline-none focus:border-[#2962ff] transition-colors"
+          />
+        </div>
+
+        <div className="md:col-span-2">
           <label className="text-xs text-[#8b949e] uppercase mb-2 block">Description</label>
           <textarea
             placeholder="Detailed description of the signal service, strategy, and track record..."
@@ -203,7 +256,25 @@ export function SignalManagementTabComponent({
                     </div>
                     <p className="text-sm text-[#8b949e] mt-1">{signal.description}</p>
                     
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-3">
+                      <div>
+                        <span className="text-xs text-[#8b949e] flex items-center gap-1">
+                          📈 Pair
+                        </span>
+                        <p className="text-white font-bold">{signal.symbol}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-[#8b949e] flex items-center gap-1">
+                          <Award className="h-3 w-3" /> Confidence
+                        </span>
+                        <p className="text-[#2962ff] font-bold">{signal.confidence}%</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-[#8b949e] flex items-center gap-1">
+                          👥 Followers
+                        </span>
+                        <p className="text-white font-bold">{signal.followers}</p>
+                      </div>
                       <div>
                         <span className="text-xs text-[#8b949e] flex items-center gap-1">
                           <DollarSignIcon className="h-3 w-3" /> Cost
@@ -212,19 +283,9 @@ export function SignalManagementTabComponent({
                       </div>
                       <div>
                         <span className="text-xs text-[#8b949e] flex items-center gap-1">
-                          <Award className="h-3 w-3" /> Win Rate
-                        </span>
-                        <p className="text-[#26a69a] font-bold">{signal.winRate}%</p>
-                      </div>
-                      <div>
-                        <span className="text-xs text-[#8b949e] flex items-center gap-1">
                           <TrendingUp className="h-3 w-3" /> Avg Return
                         </span>
                         <p className="text-[#26a69a] font-bold">+{signal.avgReturn}%</p>
-                      </div>
-                      <div>
-                        <span className="text-xs text-[#8b949e]">Total Signals</span>
-                        <p className="text-white font-bold">{signal.trades}</p>
                       </div>
                     </div>
                   </div>

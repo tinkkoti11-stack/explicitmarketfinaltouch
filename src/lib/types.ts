@@ -123,7 +123,7 @@ export type PurchasedSignal = {
 export type CopyTrade = {
   id: string;
   userId: string;
-  tradesId: number;
+  tradesId: number | string;
   traderName: string;
   allocation: number;
   status: 'ACTIVE' | 'CLOSED';
@@ -172,10 +172,28 @@ export type SignalTemplate = {
   id: string;
   providerName: string;
   description: string;
+  symbol: string;
+  confidence: number;
+  followers: number;
   cost: number;
   winRate: number;
   trades: number;
   avgReturn: number;
+  createdBy: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type CopyTradeTemplate = {
+  id: string;
+  name: string;
+  description: string;
+  winRate: number;
+  return: number;
+  followers: number;
+  risk: 'Low' | 'Medium' | 'High';
+  dailyReturn: number;
+  trades: number;
   createdBy: string;
   createdAt: number;
   updatedAt: number;
@@ -191,4 +209,20 @@ export type Wallet = {
   network?: string;
   createdAt: number;
 };
+
+export type BankAccount = {
+  id: string;
+  accountName: string;
+  accountNumber: string;
+  bankName: string;
+  routingNumber: string;
+  swiftCode?: string;
+  iban?: string;
+  accountType: 'CHECKING' | 'SAVINGS';
+  currency: string;
+  country: string;
+  type: 'DEPOSIT' | 'WITHDRAWAL';
+  isActive: boolean;
+  createdAt: number;
+  updatedAt: number;
 };

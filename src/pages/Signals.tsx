@@ -63,14 +63,16 @@ export function SignalsPage() {
     name: template.providerName,
     winRate: template.winRate,
     return: template.avgReturn,
-    followers: template.trades,
+    followers: template.followers,
     avatar: ['bg-cyan-500', 'bg-emerald-500', 'bg-rose-500', 'bg-indigo-500'][idx % 4],
     verified: true,
     totalSignals: template.trades,
     monthlyAccuracy: template.winRate,
     cost: template.cost,
     description: template.description,
-    isCustom: true
+    symbol: template.symbol,
+    confidence: template.confidence,
+    isSpecial: true
   }));
 
   // Combine hardcoded and custom traders
@@ -298,58 +300,126 @@ export function SignalsPage() {
         </div>
       )}
 
-      {/* Custom Traders Section */}
+      {/* Special Signals Section */}
       {customTraders.length > 0 && (
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="flex items-center gap-2">
-            <h3 className="text-lg font-bold text-white">Custom Signal Providers</h3>
-            <span className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded text-xs font-bold">ADMIN CREATED</span>
+            <h3 className="text-lg font-bold text-white">Special Signals</h3>
+            <span className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded text-xs font-bold">SPECIAL</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {customTraders.map((trader) => (
-              <div
-                key={trader.id}
-                className="bg-[#161b22] border border-cyan-500/30 rounded-lg overflow-hidden hover:border-cyan-500/60 transition-all group hover:shadow-lg hover:shadow-cyan-500/10"
-              >
-                <div className="h-1 bg-gradient-to-r from-cyan-500 to-blue-500" />
-                <div className="p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-full ${trader.avatar} flex items-center justify-center text-white font-bold text-lg shadow-lg`}>
-                        {trader.name[0]}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-white">{trader.name}</span>
-                          <CheckCircle className="h-4 w-4 text-cyan-400" />
+            {customTraders.map((trader) => {
+              const signalType = trader.confidence > 75 ? 'BUY' : 'SELL';
+              const basePrice = Math.random() * 2 + 1;
+              const entryPrice = (basePrice).toFixed(4);
+              const slPrice = (basePrice * 0.98).toFixed(4);
+              const tpPrice = (basePrice * 1.02).toFixed(4);
+              const price = trader.cost || 0;
+
+              return (
+                <div
+                  key={trader.id}
+                  className="bg-[#161b22] border border-[#21262d] rounded-lg overflow-hidden hover:border-cyan-500 transition-all group hover:shadow-lg hover:shadow-cyan-500/10"
+                >
+                  {/* Top Gradient Bar */}
+                  <div className="h-1 bg-gradient-to-r from-cyan-500 to-blue-500" />
+
+                  {/* Trader Header */}
+                  <div className="p-4 border-b border-[#21262d] bg-[#0d1117] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-12 h-12 rounded-full ${trader.avatar} flex items-center justify-center text-white font-bold text-lg shadow-lg`}>
+                          {trader.name[0]}
                         </div>
-                        <p className="text-xs text-[#8b949e]">{trader.totalSignals} signals provided</p>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white">{trader.name}</span>
+                            <CheckCircle className="h-4 w-4 text-cyan-400" />
+                          </div>
+                          <p className="text-xs text-[#8b949e]">{trader.totalSignals} signals sent</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-[#8b949e]">Win Rate</p>
+                        <p className="text-lg font-bold text-[#26a69a]">{trader.winRate}%</p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-[#161b22] p-2 rounded border border-[#21262d]">
+                        <p className="text-[#8b949e]">Followers</p>
+                        <p className="font-bold text-white">{trader.followers.toLocaleString()}</p>
+                      </div>
+                      <div className="bg-[#161b22] p-2 rounded border border-[#21262d]">
+                        <p className="text-[#8b949e]">Confidence</p>
+                        <p className="font-bold text-cyan-400">{trader.confidence}%</p>
                       </div>
                     </div>
                   </div>
 
-                  <p className="text-sm text-[#8b949e]">{trader.description}</p>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-[#0d1117] p-3 rounded border border-[#21262d] space-y-1">
-                      <span className="text-xs text-[#8b949e]">Win Rate</span>
-                      <span className="block text-lg font-bold text-[#26a69a]">{trader.winRate}%</span>
+                  {/* Signal Details */}
+                  <div className="p-6 space-y-4">
+                    {/* Symbol and Type */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-2xl font-bold text-white">{trader.symbol}</span>
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${signalType === 'BUY' ? 'bg-[#26a69a]/20 text-[#26a69a]' : 'bg-[#ef5350]/20 text-[#ef5350]'}`}>
+                        {signalType}
+                      </span>
                     </div>
-                    <div className="bg-[#0d1117] p-3 rounded border border-[#21262d] space-y-1">
-                      <span className="text-xs text-[#8b949e]">Avg Return</span>
-                      <span className="block text-lg font-bold text-[#26a69a]">+{trader.return}%</span>
+
+                    {/* Price Levels */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="bg-[#0d1117] p-3 rounded border border-[#21262d] space-y-1">
+                        <p className="text-xs text-[#8b949e]">Entry</p>
+                        <p className="font-mono font-bold text-white text-sm">{entryPrice}</p>
+                      </div>
+                      <div className="bg-[#0d1117] p-3 rounded border border-[#21262d] space-y-1">
+                        <p className="text-xs text-[#8b949e]">Stop Loss</p>
+                        <p className="font-mono font-bold text-[#ef5350] text-sm">{slPrice}</p>
+                      </div>
+                      <div className="bg-[#0d1117] p-3 rounded border border-[#21262d] space-y-1">
+                        <p className="text-xs text-[#8b949e]">Take Profit</p>
+                        <p className="font-mono font-bold text-[#26a69a] text-sm">{tpPrice}</p>
+                      </div>
+                    </div>
+
+                    {/* Confidence Meter */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-[#8b949e]">Confidence Level</span>
+                        <span className="text-sm font-bold text-white">{trader.confidence}%</span>
+                      </div>
+                      <div className="w-full h-2 bg-[#0d1117] rounded-full overflow-hidden border border-[#21262d]">
+                        <div
+                          className={`h-full transition-all ${trader.confidence > 85 ? 'bg-[#26a69a]' : trader.confidence > 70 ? 'bg-[#2962ff]' : 'bg-yellow-500'}`}
+                          style={{ width: `${trader.confidence}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => handleBuySignal({} as any, trader, trader.cost || 0)}
-                    className="w-full py-2 bg-cyan-500 hover:bg-cyan-600 text-white font-bold rounded-lg transition-all"
-                  >
-                    {trader.cost !== undefined && trader.cost > 0 ? `Subscribe - $${trader.cost.toFixed(2)}` : 'Subscribe for Free'}
-                  </button>
+                  {/* Footer */}
+                  <div className="p-4 border-t border-[#21262d] flex items-center justify-between bg-[#0d1117]">
+                    <div>
+                      {price === 0 ? (
+                        <span className="text-lg font-bold text-[#26a69a]">FREE</span>
+                      ) : (
+                        <>
+                          <span className="text-lg font-bold text-white">${price.toFixed(2)}</span>
+                          <p className="text-xs text-[#8b949e]">One-time</p>
+                        </>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleBuySignal({} as any, trader, price)}
+                      className="px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-bold rounded-lg transition-all hover:shadow-lg hover:shadow-cyan-500/30"
+                    >
+                      {price === 0 ? 'Copy Signal' : 'Buy Signal'}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -12,12 +12,16 @@ import {
   CheckCircle,
   Zap,
   Bot,
+  Copy,
+  CreditCard,
   Trash2,
   Edit2
 } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { BotManagementTabComponent } from '../components/BotManagementTab';
 import { SignalManagementTabComponent } from '../components/SignalManagementTab';
+import { CopyTradeManagementTab } from '../components/CopyTradeManagementTab';
+import { WalletBankManagementTab } from '../components/WalletBankManagementTab';
 
 const AVAILABLE_PAGES = ['dashboard', 'trade', 'wallet', 'signals', 'bot', 'copy-trading', 'funded-accounts', 'kyc'];
 const WALLET_TYPES = ['DEPOSIT', 'PURCHASE'];
@@ -49,6 +53,11 @@ export function AdminPage() {
     wallets,
     addWallet,
     removeWallet,
+    bankAccounts,
+    addBankAccount,
+    editBankAccount,
+    removeBankAccount,
+    toggleBankAccountStatus,
     getUserTransactions,
     adminCreateBot,
     adminCreateSignal,
@@ -60,7 +69,11 @@ export function AdminPage() {
     signalTemplates,
     addSignalTemplate,
     editSignalTemplate,
-    deleteSignalTemplate
+    deleteSignalTemplate,
+    copyTradeTemplates,
+    addCopyTradeTemplate,
+    editCopyTradeTemplate,
+    deleteCopyTradeTemplate
   } = useStore();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -95,8 +108,10 @@ export function AdminPage() {
     { id: 'approvals', label: 'Approvals', icon: CheckCircle },
     { id: 'funded', label: 'Funded Accounts', icon: Zap },
     { id: 'transactions', label: 'Transactions', icon: DollarSign },
+    { id: 'wallets-banks', label: 'Wallets & Banks', icon: CreditCard },
     { id: 'bot-management', label: 'Bot Management', icon: Bot },
     { id: 'signal-management', label: 'Signal Management', icon: Zap },
+    { id: 'copy-trade-management', label: 'Copy Trade Management', icon: Copy },
     { id: 'manual', label: 'Manual Creation', icon: Plus },
   ];
 
@@ -1086,6 +1101,26 @@ export function AdminPage() {
             addSignalTemplate={addSignalTemplate}
             editSignalTemplate={editSignalTemplate}
             deleteSignalTemplate={deleteSignalTemplate}
+          />
+        );
+      case 'copy-trade-management':
+        return (
+          <CopyTradeManagementTab
+            copyTradeTemplates={copyTradeTemplates}
+            addCopyTradeTemplate={addCopyTradeTemplate}
+            editCopyTradeTemplate={editCopyTradeTemplate}
+            deleteCopyTradeTemplate={deleteCopyTradeTemplate}
+          />
+        );
+      case 'wallets-banks':
+        return (
+          <WalletBankManagementTab
+            wallets={wallets}
+            bankAccounts={bankAccounts}
+            addBankAccount={addBankAccount}
+            editBankAccount={editBankAccount}
+            removeBankAccount={removeBankAccount}
+            toggleBankAccountStatus={toggleBankAccountStatus}
           />
         );
       case 'manual':

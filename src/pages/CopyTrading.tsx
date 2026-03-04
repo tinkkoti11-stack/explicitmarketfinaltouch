@@ -21,7 +21,7 @@ const AVAILABLE_TRADERS = [
 ];
 
 export function CopyTradingPage() {
-  const { account, purchasedCopyTrades, followTrader, stopCopyTrading } = useStore();
+  const { account, purchasedCopyTrades, followTrader, stopCopyTrading, copyTradeTemplates } = useStore();
   const [activeTab, setActiveTab] = useState<'browse' | 'active' | 'history'>('browse');
   const [selectedTrader, setSelectedTrader] = useState<any>(null);
   const [allocateAmount, setAllocateAmount] = useState('');
@@ -55,6 +55,22 @@ export function CopyTradingPage() {
   const filteredTraders = AVAILABLE_TRADERS.filter(t =>
     filterRisk === 'all' ? true : t.risk === filterRisk
   );
+
+  // Convert copy trade templates to trader format
+  const specialTraders = copyTradeTemplates.map((template, idx) => ({
+    id: template.id,
+    name: template.name,
+    winRate: `${template.winRate}%`,
+    return: `+${template.return}%`,
+    followers: template.followers,
+    risk: template.risk,
+    dailyReturn: `${template.dailyReturn}%`,
+    trades: template.trades,
+    isSpecial: true
+  }));
+
+  // Combine hardcoded and special traders
+  const allTraders = [...filteredTraders, ...specialTraders.filter(t => filterRisk === 'all' || t.risk === filterRisk)];
 
   const activeCopies = purchasedCopyTrades.filter(c => c.status === 'ACTIVE');
   const tradeHistory = purchasedCopyTrades.filter(c => c.status === 'CLOSED');
@@ -124,18 +140,33 @@ export function CopyTradingPage() {
 
           {/* Traders Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredTraders.map((trader) => (
+            {allTraders.map((trader) => (
               <div
                 key={trader.id}
-                className="bg-[#161b22] border border-[#21262d] rounded-lg p-6 hover:border-[#26a69a] transition space-y-4"
+                className={`rounded-lg p-6 transition space-y-4 ${
+                  (trader as any).isSpecial
+                    ? 'bg-[#161b22] border border-cyan-500/30 hover:border-cyan-500/60'
+                    : 'bg-[#161b22] border border-[#21262d] hover:border-[#26a69a]'
+                }`}
               >
                 {/* Trader Header */}
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#26a69a] to-[#2962ff] flex items-center justify-center text-xl font-bold">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${
+                    (trader as any).isSpecial
+                      ? 'bg-gradient-to-br from-cyan-500 to-blue-500'
+                      : 'bg-gradient-to-br from-[#26a69a] to-[#2962ff]'
+                  }`}>
                     {trader.name.charAt(0)}
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-bold text-white">{trader.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-white">{trader.name}</h3>
+                      {(trader as any).isSpecial && (
+                        <span className="text-xs px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded font-bold">
+                          SPECIAL
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1 text-xs text-[#8b949e]">
                       <Users className="h-3 w-3" />
                       {trader.followers.toLocaleString()} followers

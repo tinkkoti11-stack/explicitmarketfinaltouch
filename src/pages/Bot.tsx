@@ -414,7 +414,7 @@ export function BotPage() {
                       </h4>
                       {bot.isTemplate && (
                         <span className="text-xs px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded font-bold">
-                          CUSTOM
+                          SPECIAL
                         </span>
                       )}
                     </div>
