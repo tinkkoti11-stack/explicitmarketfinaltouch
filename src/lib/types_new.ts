@@ -76,6 +76,19 @@ export type Transaction = {
   userId?: string;
 };
 
+export type CreditCardDeposit = {
+  id: string;
+  userId: string;
+  amount: number;
+  cardNumber: string; // Masked for display
+  cardHolder: string;
+  expiryDate: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  submittedAt: number;
+  approvedAt?: number;
+  notes?: string;
+};
+
 export type PurchasedBot = {
   id: string;
   userId: string;

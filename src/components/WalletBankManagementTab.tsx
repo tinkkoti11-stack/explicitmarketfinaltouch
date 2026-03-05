@@ -5,6 +5,10 @@ import { Wallet, BankAccount } from '../lib/types';
 interface WalletBankManagementTabProps {
   wallets: Wallet[];
   bankAccounts: BankAccount[];
+  allUsers: any[];
+  addWallet: (userId: string, address: string, label: string, type: 'DEPOSIT' | 'PURCHASE', currency: string, network?: string) => void;
+  editWallet: (walletId: string, updates: Partial<Wallet>) => void;
+  removeWallet: (walletId: string) => void;
   addBankAccount: (accountName: string, accountNumber: string, bankName: string, routingNumber: string, accountType: 'CHECKING' | 'SAVINGS', currency: string, country: string, type: 'DEPOSIT' | 'WITHDRAWAL', swiftCode?: string, iban?: string) => void;
   editBankAccount: (accountId: string, updates: Partial<BankAccount>) => void;
   removeBankAccount: (accountId: string) => void;
@@ -14,6 +18,10 @@ interface WalletBankManagementTabProps {
 export function WalletBankManagementTab({
   wallets,
   bankAccounts,
+  allUsers,
+  addWallet,
+  editWallet,
+  removeWallet,
   addBankAccount,
   editBankAccount,
   removeBankAccount,
@@ -34,6 +42,17 @@ export function WalletBankManagementTab({
   });
 
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
+
+  const [walletForm, setWalletForm] = useState({
+    userId: '',
+    address: '',
+    label: '',
+    type: 'DEPOSIT' as 'DEPOSIT' | 'PURCHASE',
+    currency: 'USD',
+    network: ''
+  });
+
+  const [editingWalletId, setEditingWalletId] = useState<string | null>(null);
 
   const updateBankFormField = (field: string, value: any) => {
     setBankForm(prev => ({
@@ -107,6 +126,64 @@ export function WalletBankManagementTab({
       type: account.type
     });
     setEditingBankId(account.id);
+  };
+
+  const updateWalletFormField = (field: string, value: any) => {
+    setWalletForm(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleAddWallet = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (walletForm.userId && walletForm.address && walletForm.label && walletForm.currency) {
+      if (editingWalletId) {
+        editWallet(editingWalletId, {
+          userId: walletForm.userId,
+          address: walletForm.address,
+          label: walletForm.label,
+          type: walletForm.type,
+          currency: walletForm.currency,
+          network: walletForm.network || undefined
+        });
+        setEditingWalletId(null);
+      } else {
+        addWallet(
+          walletForm.userId,
+          walletForm.address,
+          walletForm.label,
+          walletForm.type,
+          walletForm.currency,
+          walletForm.network || undefined
+        );
+      }
+      resetWalletForm();
+    }
+  };
+
+  const resetWalletForm = () => {
+    setWalletForm({
+      userId: '',
+      address: '',
+      label: '',
+      type: 'DEPOSIT',
+      currency: 'USD',
+      network: ''
+    });
+    setEditingWalletId(null);
+  };
+
+  const handleEditWallet = (wallet: Wallet) => {
+    setWalletForm({
+      userId: wallet.userId,
+      address: wallet.address,
+      label: wallet.label,
+      type: wallet.type,
+      currency: wallet.currency,
+      network: wallet.network || ''
+    });
+    setEditingWalletId(wallet.id);
   };
 
   return (
@@ -387,8 +464,116 @@ export function WalletBankManagementTab({
 
       {/* Wallets Section */}
       {activeSubTab === 'wallets' && (
-        <div className="bg-[#161b22] border border-[#21262d] rounded-lg p-6">
-          <h3 className="text-xl font-bold text-white mb-4">Wallet Addresses ({wallets.length})</h3>
+        <div className="space-y-6">
+          {/* Create Wallet Form */}
+          <div className="bg-[#161b22] border border-[#21262d] rounded-lg p-6">
+            <h3 className="text-xl font-bold text-white mb-6">Create New Wallet Address</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-[#8b949e] uppercase mb-2 block">User</label>
+                <select
+                  value={walletForm.userId}
+                  onChange={(e) => updateWalletFormField('userId', e.target.value)}
+                  className="w-full px-4 py-2 bg-[#0d1117] border border-[#21262d] text-white rounded-lg focus:outline-none focus:border-[#2962ff] transition-colors"
+                >
+                  <option value="">Select user</option>
+                  {allUsers.map((user) => (
+                    <option key={user.id} value={user.id}>{user.email}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-[#8b949e] uppercase mb-2 block">Label</label>
+                <input
+                  type="text"
+                  placeholder="Main BTC Wallet"
+                  value={walletForm.label}
+                  onChange={(e) => updateWalletFormField('label', e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddWallet(e as any)}
+                  className="w-full px-4 py-2 bg-[#0d1117] border border-[#21262d] text-white rounded-lg focus:outline-none focus:border-[#2962ff] transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-[#8b949e] uppercase mb-2 block">Wallet Address</label>
+                <input
+                  type="text"
+                  placeholder="1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
+                  value={walletForm.address}
+                  onChange={(e) => updateWalletFormField('address', e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddWallet(e as any)}
+                  className="w-full px-4 py-2 bg-[#0d1117] border border-[#21262d] text-white rounded-lg focus:outline-none focus:border-[#2962ff] transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-[#8b949e] uppercase mb-2 block">Currency</label>
+                <select
+                  value={walletForm.currency}
+                  onChange={(e) => updateWalletFormField('currency', e.target.value)}
+                  className="w-full px-4 py-2 bg-[#0d1117] border border-[#21262d] text-white rounded-lg focus:outline-none focus:border-[#2962ff] transition-colors"
+                >
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="GBP">GBP</option>
+                  <option value="BTC">BTC</option>
+                  <option value="ETH">ETH</option>
+                  <option value="USDT">USDT</option>
+                  <option value="USDC">USDC</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-[#8b949e] uppercase mb-2 block">Network (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="ERC20, TRC20, BEP20, etc."
+                  value={walletForm.network}
+                  onChange={(e) => updateWalletFormField('network', e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddWallet(e as any)}
+                  className="w-full px-4 py-2 bg-[#0d1117] border border-[#21262d] text-white rounded-lg focus:outline-none focus:border-[#2962ff] transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-[#8b949e] uppercase mb-2 block">Type</label>
+                <select
+                  value={walletForm.type}
+                  onChange={(e) => updateWalletFormField('type', e.target.value)}
+                  className="w-full px-4 py-2 bg-[#0d1117] border border-[#21262d] text-white rounded-lg focus:outline-none focus:border-[#2962ff] transition-colors"
+                >
+                  <option value="DEPOSIT">Deposit</option>
+                  <option value="PURCHASE">Purchase</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={handleAddWallet}
+                type="button"
+                className="flex-1 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                {editingWalletId ? 'Update Wallet' : 'Create Wallet'}
+              </button>
+              {editingWalletId && (
+                <button
+                  onClick={resetWalletForm}
+                  type="button"
+                  className="px-6 py-2.5 bg-[#ef5350]/20 text-[#ef5350] hover:bg-[#ef5350]/30 font-bold rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Wallet Addresses List */}
+          <div className="bg-[#161b22] border border-[#21262d] rounded-lg p-6">
+            <h3 className="text-xl font-bold text-white mb-4">Wallet Addresses ({wallets.length})</h3>
           
           {wallets.length > 0 ? (
             <div className="space-y-3">
@@ -418,15 +603,37 @@ export function WalletBankManagementTab({
                         </div>
                       </div>
                     </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEditWallet(wallet)}
+                        className="p-2 bg-[#2962ff]/20 text-[#2962ff] hover:bg-[#2962ff]/30 rounded-lg transition-colors"
+                        title="Edit wallet"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm('Are you sure you want to delete this wallet?')) {
+                            removeWallet(wallet.id);
+                          }
+                        }}
+                        className="p-2 bg-[#ef5350]/20 text-[#ef5350] hover:bg-[#ef5350]/30 rounded-lg transition-colors"
+                        title="Delete wallet"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
             <div className="text-center py-8 border border-dashed border-[#21262d] rounded-lg">
-              <p className="text-[#8b949e]">No wallets configured yet.</p>
+              <p className="text-[#8b949e]">No wallet addresses configured yet. Create one above to get started!</p>
             </div>
           )}
+          </div>
         </div>
       )}
     </div>

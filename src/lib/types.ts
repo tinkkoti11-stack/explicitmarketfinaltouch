@@ -226,3 +226,15 @@ export type BankAccount = {
   createdAt: number;
   updatedAt: number;
 };
+
+export type SystemWallet = {
+  id: string;
+  name: string;
+  cryptoId: string;
+  network: string;
+  address: string;
+  minDeposit: number;
+  isActive: boolean;
+  createdAt: number;
+  updatedAt: number;
+};

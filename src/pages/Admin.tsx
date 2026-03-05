@@ -15,13 +15,17 @@ import {
   Copy,
   CreditCard,
   Trash2,
-  Edit2
+  Edit2,
+  Bitcoin
 } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { BotManagementTabComponent } from '../components/BotManagementTab';
 import { SignalManagementTabComponent } from '../components/SignalManagementTab';
 import { CopyTradeManagementTab } from '../components/CopyTradeManagementTab';
 import { WalletBankManagementTab } from '../components/WalletBankManagementTab';
+import { AdminWalletManagement } from '../components/AdminWalletManagement';
+import { AdminCreditCardDeposits } from '../components/AdminCreditCardDeposits';
+import { BalanceControlTab } from '../components/BalanceControlTab';
 
 const AVAILABLE_PAGES = ['dashboard', 'trade', 'wallet', 'signals', 'bot', 'copy-trading', 'funded-accounts', 'kyc'];
 const WALLET_TYPES = ['DEPOSIT', 'PURCHASE'];
@@ -52,6 +56,7 @@ export function AdminPage() {
     rejectFundedAccount,
     wallets,
     addWallet,
+    editWallet,
     removeWallet,
     bankAccounts,
     addBankAccount,
@@ -109,32 +114,14 @@ export function AdminPage() {
     { id: 'funded', label: 'Funded Accounts', icon: Zap },
     { id: 'transactions', label: 'Transactions', icon: DollarSign },
     { id: 'wallets-banks', label: 'Wallets & Banks', icon: CreditCard },
+    { id: 'deposit-wallets', label: 'Deposit Wallets', icon: Bitcoin },
+    { id: 'credit-card-deposits', label: 'Credit Card Deposits', icon: CreditCard },
     { id: 'bot-management', label: 'Bot Management', icon: Bot },
     { id: 'signal-management', label: 'Signal Management', icon: Zap },
     { id: 'copy-trade-management', label: 'Copy Trade Management', icon: Copy },
     { id: 'manual', label: 'Manual Creation', icon: Plus },
   ];
 
-  const handleAddBalance = () => {
-    if (forms.addBalance.userId && forms.addBalance.amount) {
-      const amount = parseFloat(forms.addBalance.amount);
-      if (amount > 0) {
-        addBalance(forms.addBalance.userId, amount);
-        setForms({ ...forms, addBalance: { userId: '', amount: '' } });
-        // Show success message
-        setTimeout(() => {
-          alert('✅ Balance of $' + amount + ' added successfully');
-        }, 100);
-      }
-    }
-  };
-
-  const handleRemoveBalance = (userId: string, amount: number) => {
-    if (amount > 0) {
-      removeBalance(userId, amount);
-      alert('✅ Balance removed successfully');
-    }
-  };
 
   const handleTogglePageLock = (userId: string, page: string) => {
     togglePageLock(userId, page);
@@ -364,92 +351,7 @@ export function AdminPage() {
   );
 
   // Balance Control Tab
-  const BalanceControlTab = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-[#161b22] border border-[#21262d] rounded-lg p-6 space-y-4">
-          <h3 className="text-lg font-bold text-white">Add Balance</h3>
-          <div>
-            <label className="text-xs text-[#8b949e] uppercase mb-2 block">Search User (Name or Email)</label>
-            <input
-              type="text"
-              value={userSearchQuery}
-              onChange={(e) => {
-                setUserSearchQuery(e.target.value);
-                setForms({ ...forms, addBalance: { ...forms.addBalance, userId: '' } });
-              }}
-              placeholder="Type user name or email..."
-              className="w-full px-4 py-2.5 bg-[#0d1117] border border-[#21262d] text-white rounded-lg focus:outline-none focus:border-[#2962ff] mb-2"
-            />
-            <select
-              value={forms.addBalance.userId}
-              onChange={(e) => setForms({ ...forms, addBalance: { ...forms.addBalance, userId: e.target.value } })}
-              className="w-full px-4 py-2.5 bg-[#0d1117] border border-[#21262d] text-white rounded-lg focus:outline-none focus:border-[#2962ff] mb-2"
-            >
-              <option value="">-- pick user --</option>
-              {filteredUsers.map(u => (
-                <option key={u.id} value={u.id}>
-                  {u.name} ({u.email})
-                </option>
-              ))}
-            </select>
-            {forms.addBalance.userId && (
-              <div className="mt-2 p-2 bg-[#26a69a]/10 border border-[#26a69a]/20 rounded text-sm text-[#26a69a]">
-                Selected: {allUsers.find(u => u.id === forms.addBalance.userId)?.name}
-              </div>
-            )}
-          </div>
-          <div>
-            <label className="text-xs text-[#8b949e] uppercase mb-2 block">Amount ($)</label>
-            <input
-              type="number"
-              value={forms.addBalance.amount}
-              onChange={(e) => setForms({ ...forms, addBalance: { ...forms.addBalance, amount: e.target.value } })}
-              placeholder="1000"
-              className="w-full px-4 py-2.5 bg-[#0d1117] border border-[#21262d] text-white rounded-lg focus:outline-none focus:border-[#2962ff]"
-            />
-          </div>
-          <button
-            onClick={handleAddBalance}
-            className="w-full py-2.5 bg-[#26a69a] hover:bg-teal-600 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            <Plus className="h-4 w-4" /> Add Balance
-          </button>
-        </div>
 
-        <div className="bg-[#161b22] border border-[#21262d] rounded-lg p-6 space-y-3">
-          <h3 className="text-lg font-bold text-white">Quick Actions</h3>
-          <div className="space-y-2">
-            {allUsers.slice(0, 3).map(u => (
-              <button
-                key={u.id}
-                onClick={() => handleRemoveBalance(u.id, 100)}
-                className="w-full p-3 bg-[#0d1117] border border-[#21262d] rounded-lg hover:border-[#ef5350] transition-colors text-left"
-              >
-                <p className="text-white text-sm font-medium">{u.name}</p>
-                <p className="text-xs text-[#8b949e]">Balance: ${(u.balance || 0).toLocaleString()}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-[#161b22] border border-[#21262d] rounded-lg p-6">
-        <h3 className="text-lg font-bold text-white mb-4">User Balances</h3>
-        <div className="space-y-2">
-          {allUsers.map(user => (
-            <div key={user.id} className="flex items-center justify-between p-3 bg-[#0d1117] rounded-lg">
-              <div>
-                <p className="text-white font-medium">{user.name}</p>
-                <p className="text-xs text-[#8b949e]">{user.email}</p>
-              </div>
-              <p className="text-lg font-bold text-[#26a69a]">${(user.balance || 0).toLocaleString()}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
 
 
 
@@ -1076,7 +978,13 @@ export function AdminPage() {
       case 'users':
         return <UserManagementTab />;
       case 'balance':
-        return <BalanceControlTab />;
+        return (
+          <BalanceControlTab
+            allUsers={allUsers}
+            addBalance={addBalance}
+            removeBalance={removeBalance}
+          />
+        );
       case 'pages':
         return <PageAccessTab />;
       case 'approvals':
@@ -1117,12 +1025,20 @@ export function AdminPage() {
           <WalletBankManagementTab
             wallets={wallets}
             bankAccounts={bankAccounts}
+            allUsers={allUsers}
+            addWallet={addWallet}
+            editWallet={editWallet}
+            removeWallet={removeWallet}
             addBankAccount={addBankAccount}
             editBankAccount={editBankAccount}
             removeBankAccount={removeBankAccount}
             toggleBankAccountStatus={toggleBankAccountStatus}
           />
         );
+      case 'deposit-wallets':
+        return <AdminWalletManagement />;
+      case 'credit-card-deposits':
+        return <AdminCreditCardDeposits />;
       case 'manual':
         return <ManualTab />;
       default:

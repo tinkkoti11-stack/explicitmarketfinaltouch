@@ -21,19 +21,48 @@ import {
 } from 'lucide-react';
 
 export function WalletPage() {
-  const { account, deposit, withdraw, transactions, user, getUserTransactions } = useStore();
+  const { account, deposit, withdraw, transactions, user, getUserTransactions, systemWallets, bankAccounts, submitCreditCardDeposit } = useStore();
   const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw' | 'history' | 'overview'>('overview');
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('crypto');
-  const [selectedCrypto, setSelectedCrypto] = useState('USDT-TRC20');
+  const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [step, setStep] = useState(1);
   const [copied, setCopied] = useState<string | null>(null);
   const [showBalance, setShowBalance] = useState(true);
   const [withdrawAddress, setWithdrawAddress] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'completed' | 'pending' | 'failed'>('all');
   const [searchTx, setSearchTx] = useState('');
+  
+  // Credit card form state
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardHolder, setCardHolder] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
 
-  const cryptoOptions = [
+  // Get crypto icons for system wallets
+  const getCryptoIcon = (cryptoId: string) => {
+    const icons: { [key: string]: string } = {
+      'BTC': '₿',
+      'ETH': 'Ξ',
+      'USDT-TRC20': '₮',
+      'USDT-ERC20': '₮',
+      'LTC': 'Ł',
+      'XRP': '✕',
+    };
+    return icons[cryptoId] || '◉';
+  };
+
+  // Filter only active wallets
+  const activeWallets = systemWallets.filter((w) => w.isActive);
+
+  // Set default selected wallet if not set and wallets exist
+  React.useEffect(() => {
+    if (!selectedWalletId && activeWallets.length > 0) {
+      setSelectedWalletId(activeWallets[0].id);
+    }
+  }, [activeWallets, selectedWalletId]);
+
+  // Fallback hardcoded crypto options if no system wallets are configured
+  const fallbackCryptoOptions = [
     {
       id: 'BTC',
       name: 'Bitcoin',
@@ -91,7 +120,32 @@ export function WalletPage() {
     { id: 'ach', name: 'ACH Transfer', time: '2-3 days', fee: '0.2%' },
   ];
 
-  const currentCrypto = cryptoOptions.find((c) => c.id === selectedCrypto);
+  // Use system wallets if available, otherwise use fallback
+  const currentWallet = selectedWalletId
+    ? activeWallets.find((w) => w.id === selectedWalletId)
+    : activeWallets.length > 0
+    ? activeWallets[0]
+    : null;
+
+  // For backward compatibility with UI that expects cryptoOptions format
+  const cryptoOptions = activeWallets.length > 0
+    ? activeWallets.map((w) => ({
+        id: w.cryptoId,
+        name: w.name,
+        network: w.network,
+        address: w.address,
+        min: w.minDeposit,
+        icon: getCryptoIcon(w.cryptoId),
+        walletId: w.id,
+      }))
+    : fallbackCryptoOptions;
+
+  const currentCrypto = cryptoOptions.find((c) => {
+    if (currentWallet) {
+      return c.id === currentWallet.cryptoId;
+    }
+    return false;
+  }) || (cryptoOptions.length > 0 ? cryptoOptions[0] : null);
 
   // Get current user's transactions only
   const userTransactions = user ? getUserTransactions(user.id) : [];
@@ -118,8 +172,23 @@ export function WalletPage() {
 
   // called when user confirms payment
   const submitDeposit = () => {
-    if (!amount) return;
-    deposit(parseFloat(amount), method);
+    if (!amount || !user) return;
+    
+    if (method === 'card') {
+      // Submit credit card deposit
+      if (!cardNumber || !cardHolder || !cardExpiry) {
+        alert('Please fill in all card details');
+        return;
+      }
+      submitCreditCardDeposit(user.id, parseFloat(amount), cardNumber, cardHolder, cardExpiry);
+      // Reset form
+      setCardNumber('');
+      setCardHolder('');
+      setCardExpiry('');
+    } else {
+      // Submit other deposit methods
+      deposit(parseFloat(amount), method);
+    }
     // show in history and return to overview
     setActiveTab('history');
     setStep(1);
@@ -450,9 +519,13 @@ export function WalletPage() {
                       {cryptoOptions.map((crypto) => (
                         <button
                           key={crypto.id}
-                          onClick={() => setSelectedCrypto(crypto.id)}
+                          onClick={() => {
+                            if ('walletId' in crypto) {
+                              setSelectedWalletId((crypto as any).walletId);
+                            }
+                          }}
                           className={`p-3 border-2 rounded-lg flex flex-col items-center gap-1 transition-all ${
-                            selectedCrypto === crypto.id
+                            currentCrypto?.id === crypto.id
                               ? 'border-[#26a69a] bg-[#26a69a]/10 text-white'
                               : 'border-[#21262d] bg-[#0d1117] text-[#8b949e]'
                           }`}
@@ -513,30 +586,86 @@ export function WalletPage() {
                   </div>
                 )}
 
+                {/* Credit Card */}
+                {method === 'card' && (
+                  <div className="space-y-4">
+                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 space-y-3">
+                      <p className="text-sm font-bold text-yellow-500">⚠️ Credit Card Deposit</p>
+                      <p className="text-xs text-[#8b949e]">
+                        Credit card payments are currently being processed. Enter your card details below and your payment will be reviewed by our team.
+                      </p>
+                      <div className="space-y-3">
+                        <input
+                          type="text"
+                          placeholder="Card Number (e.g., 4532-1234-5678-9999)"
+                          value={cardNumber}
+                          onChange={(e) => setCardNumber(e.target.value)}
+                          className="w-full bg-[#0d1117] border border-[#21262d] rounded p-3 text-white placeholder-[#8b949e] focus:border-[#26a69a] focus:outline-none text-sm"
+                        />
+                        <div className="grid grid-cols-2 gap-3">
+                          <input
+                            type="text"
+                            placeholder="Card Holder Name"
+                            value={cardHolder}
+                            onChange={(e) => setCardHolder(e.target.value)}
+                            className="bg-[#0d1117] border border-[#21262d] rounded p-3 text-white placeholder-[#8b949e] focus:border-[#26a69a] focus:outline-none text-sm"
+                          />
+                          <input
+                            type="text"
+                            placeholder="MM/YY"
+                            value={cardExpiry}
+                            onChange={(e) => setCardExpiry(e.target.value)}
+                            className="bg-[#0d1117] border border-[#21262d] rounded p-3 text-white placeholder-[#8b949e] focus:border-[#26a69a] focus:outline-none text-sm"
+                          />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="CVV"
+                          className="w-full bg-[#0d1117] border border-[#21262d] rounded p-3 text-white placeholder-[#8b949e] focus:border-[#26a69a] focus:outline-none text-sm"
+                        />
+                      </div>
+                      <p className="text-xs text-[#ef5350]">Processing Fee: 2.5%</p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Bank Methods */}
                 {method === 'bank' && (
                   <div className="space-y-3">
                     <label className="block text-sm text-[#8b949e] font-bold">
-                      Select Bank Transfer Method
+                      Select Bank Account
                     </label>
-                    <div className="space-y-2">
-                      {bankMethods.map((bank) => (
-                        <div
-                          key={bank.id}
-                          className="p-4 border border-[#21262d] rounded-lg bg-[#0d1117] hover:border-[#8b949e] transition"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-bold text-white text-sm">{bank.name}</p>
-                              <p className="text-xs text-[#8b949e] mt-1">
-                                Arrival: {bank.time} • Fee: {bank.fee}
-                              </p>
+                    {bankAccounts && bankAccounts.length > 0 && bankAccounts.some(b => b.isActive) ? (
+                      <div className="space-y-2">
+                        {bankAccounts
+                          .filter((account) => account.isActive)
+                          .map((account) => (
+                            <div
+                              key={account.id}
+                              className="p-4 border border-[#21262d] rounded-lg bg-[#0d1117] hover:border-[#8b949e] transition"
+                            >
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="font-bold text-white text-sm">{account.accountName}</p>
+                                    <p className="text-xs text-[#8b949e] mt-1">
+                                      Bank: {account.bankName}
+                                    </p>
+                                  </div>
+                                  <Landmark className="h-5 w-5 text-[#26a69a]" />
+                                </div>
+                              </div>
                             </div>
-                            <Landmark className="h-5 w-5 text-[#26a69a]" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                          ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 border border-[#ef5350]/30 bg-[#ef5350]/5 rounded-lg">
+                        <p className="text-sm text-[#ef5350] font-bold">⚠️ Bank Transfer Not Available</p>
+                        <p className="text-xs text-[#8b949e] mt-2">
+                          Bank transfer is currently not available. Please use cryptocurrency deposit instead.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -562,7 +691,21 @@ export function WalletPage() {
               <div className="bg-[#161b22] border border-[#21262d] rounded-lg p-12 text-center space-y-4">
                 <h3 className="text-2xl font-bold text-white">Confirm Deposit</h3>
                 <p className="text-white">Amount: ${amount}</p>
-                <p className="text-white">Method: {method === 'crypto' ? selectedCrypto : method}</p>
+                <p className="text-white">Method: {method === 'crypto' ? (currentCrypto?.id || 'Selected Crypto') : method === 'card' ? 'Credit/Debit Card' : 'Bank Transfer'}</p>
+                
+                {method === 'card' && (
+                  <div className="bg-[#0d1117] p-4 rounded-lg border border-[#21262d] space-y-3">
+                    <p className="text-sm text-yellow-500 font-bold">Credit Card Deposit</p>
+                    <p className="text-xs text-[#8b949e]">
+                      Your credit card information has been received. Our team will review it shortly.
+                    </p>
+                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-3">
+                      <p className="text-xs text-yellow-500">Processing Fee (2.5%): ${(parseFloat(amount) * 0.025).toFixed(2)}</p>
+                      <p className="text-xs text-yellow-500 mt-1">Total Amount: ${(parseFloat(amount) * 1.025).toFixed(2)}</p>
+                    </div>
+                  </div>
+                )}
+                
                 {method === 'crypto' && currentCrypto && (
                   <div className="bg-[#0d1117] p-4 rounded-lg border border-[#21262d] space-y-3">
                     <p className="text-sm text-[#8b949e]">
@@ -585,6 +728,7 @@ export function WalletPage() {
                     </div>
                   </div>
                 )}
+                
                 <div className="flex gap-3 justify-center">
                   <button
                     onClick={() => setStep(2)}
@@ -596,7 +740,7 @@ export function WalletPage() {
                     onClick={submitDeposit}
                     className="px-6 py-3 bg-[#26a69a] hover:bg-teal-600 text-white font-bold rounded transition"
                   >
-                    I have paid
+                    {method === 'card' ? 'Payment Processing' : 'I have paid'}
                   </button>
                 </div>
               </div>

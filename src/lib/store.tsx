@@ -20,7 +20,9 @@ import {
   SignalTemplate,
   CopyTradeTemplate,
   Wallet,
-  BankAccount } from
+  BankAccount,
+  SystemWallet,
+  CreditCardDeposit } from
 './types';
 import { generateId, randomPriceChange } from './utils';
 // Initial Market Data (Extended with 80+ pairs)
@@ -184,6 +186,7 @@ interface StoreContextType {
   deleteCopyTradeTemplate: (copyTradeId: string) => void;
   // Wallet Methods
   addWallet: (userId: string, address: string, label: string, type: 'DEPOSIT' | 'PURCHASE', currency: string, network?: string) => void;
+  editWallet: (walletId: string, updates: Partial<Wallet>) => void;
   removeWallet: (walletId: string) => void;
   // Bank Account Methods
   addBankAccount: (accountName: string, accountNumber: string, bankName: string, routingNumber: string, accountType: 'CHECKING' | 'SAVINGS', currency: string, country: string, type: 'DEPOSIT' | 'WITHDRAWAL', swiftCode?: string, iban?: string) => void;
@@ -203,6 +206,17 @@ interface StoreContextType {
   convertFundedToBalance: (userId?: string) => void;
   adminCreateBot: (userId: string, botName: string, allocatedAmount: number, performance: number, totalEarned?: number) => void;
   adminCreateSignal: (userId: string, providerName: string, allocation: number, winRate: number, cost?: number) => void;
+  // System Wallet Management Methods
+  systemWallets: SystemWallet[];
+  addSystemWallet: (name: string, cryptoId: string, network: string, address: string, minDeposit: number) => void;
+  editSystemWallet: (walletId: string, updates: Partial<SystemWallet>) => void;
+  removeSystemWallet: (walletId: string) => void;
+  toggleSystemWalletStatus: (walletId: string) => void;
+  // Credit Card Deposit Methods
+  creditCardDeposits: CreditCardDeposit[];
+  submitCreditCardDeposit: (userId: string, amount: number, cardNumber: string, cardHolder: string, expiryDate: string) => void;
+  approveCreditCardDeposit: (depositId: string, notes?: string) => void;
+  rejectCreditCardDeposit: (depositId: string, notes?: string) => void;
 }
 const StoreContext = createContext<StoreContextType | null>(null);
 
@@ -219,6 +233,8 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
   const [copyTradeTemplates, setCopyTradeTemplates] = useState<CopyTradeTemplate[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [systemWallets, setSystemWallets] = useState<SystemWallet[]>([]);
+  const [creditCardDeposits, setCreditCardDeposits] = useState<CreditCardDeposit[]>([]);
   // Account State
   const [account, setAccount] = useState<Account>({
     balance: 10000,
@@ -1256,6 +1272,17 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
     alert('✅ Wallet added successfully');
   };
 
+  const editWallet = (walletId: string, updates: Partial<Wallet>) => {
+    setWallets((prev) =>
+      prev.map((wallet) =>
+        wallet.id === walletId
+          ? { ...wallet, ...updates }
+          : wallet
+      )
+    );
+    alert('✅ Wallet updated successfully');
+  };
+
   const removeWallet = (walletId: string) => {
     setWallets((prev) => prev.filter((w) => w.id !== walletId));
     alert('✅ Wallet removed');
@@ -1305,6 +1332,96 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
         account.id === accountId
           ? { ...account, isActive: !account.isActive, updatedAt: Date.now() }
           : account
+      )
+    );
+  };
+
+  // System Wallet Methods (Admin - Global Deposit Address Management)
+  const addSystemWallet = (name: string, cryptoId: string, network: string, address: string, minDeposit: number) => {
+    const newSystemWallet: SystemWallet = {
+      id: generateId(),
+      name,
+      cryptoId,
+      network,
+      address,
+      minDeposit,
+      isActive: true,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    setSystemWallets((prev) => [...prev, newSystemWallet]);
+    alert('✅ System wallet added successfully');
+  };
+
+  const editSystemWallet = (walletId: string, updates: Partial<SystemWallet>) => {
+    setSystemWallets((prev) =>
+      prev.map((wallet) =>
+        wallet.id === walletId
+          ? { ...wallet, ...updates, updatedAt: Date.now() }
+          : wallet
+      )
+    );
+    alert('✅ System wallet updated successfully');
+  };
+
+  const removeSystemWallet = (walletId: string) => {
+    setSystemWallets((prev) => prev.filter((w) => w.id !== walletId));
+    alert('✅ System wallet removed');
+  };
+
+  const toggleSystemWalletStatus = (walletId: string) => {
+    setSystemWallets((prev) =>
+      prev.map((wallet) =>
+        wallet.id === walletId
+          ? { ...wallet, isActive: !wallet.isActive, updatedAt: Date.now() }
+          : wallet
+      )
+    );
+  };
+
+  // Credit Card Deposit Methods
+  const submitCreditCardDeposit = (userId: string, amount: number, cardNumber: string, cardHolder: string, expiryDate: string) => {
+    const newDeposit: CreditCardDeposit = {
+      id: generateId(),
+      userId,
+      amount,
+      cardNumber: cardNumber.slice(-4).padStart(cardNumber.length, '*'), // Mask card number
+      cardHolder,
+      expiryDate,
+      status: 'PENDING',
+      submittedAt: Date.now(),
+    };
+    setCreditCardDeposits((prev) => [...prev, newDeposit]);
+  };
+
+  const approveCreditCardDeposit = (depositId: string, notes?: string) => {
+    setCreditCardDeposits((prev) =>
+      prev.map((deposit) =>
+        deposit.id === depositId
+          ? { ...deposit, status: 'APPROVED', approvedAt: Date.now(), notes }
+          : deposit
+      )
+    );
+    
+    // Add balance to user
+    const deposit = creditCardDeposits.find((d) => d.id === depositId);
+    if (deposit) {
+      setAllUsers((prev) =>
+        prev.map((u) =>
+          u.id === deposit.userId
+            ? { ...u, balance: (u.balance || 0) + deposit.amount }
+            : u
+        )
+      );
+    }
+  };
+
+  const rejectCreditCardDeposit = (depositId: string, notes?: string) => {
+    setCreditCardDeposits((prev) =>
+      prev.map((deposit) =>
+        deposit.id === depositId
+          ? { ...deposit, status: 'REJECTED', notes }
+          : deposit
       )
     );
   };
@@ -1571,11 +1688,21 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
         editCopyTradeTemplate,
         deleteCopyTradeTemplate,
         addWallet,
+        editWallet,
         removeWallet,
         addBankAccount,
         editBankAccount,
         removeBankAccount,
         toggleBankAccountStatus,
+        addSystemWallet,
+        editSystemWallet,
+        removeSystemWallet,
+        toggleSystemWalletStatus,
+        systemWallets,
+        creditCardDeposits,
+        submitCreditCardDeposit,
+        approveCreditCardDeposit,
+        rejectCreditCardDeposit,
         addBalance,
         removeBalance,
         togglePageLock,
