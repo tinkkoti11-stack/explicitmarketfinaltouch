@@ -32,6 +32,9 @@ export function BotPage() {
     user,
     botTemplates
   } = useStore();
+
+  const effectiveBotActive = botActive || purchasedBots.some((b) => b.status === 'ACTIVE' && b.allocatedAmount > 0);
+
   const [paymentModal, setPaymentModal] = useState({
     isOpen: false,
     bot: null as any,
@@ -250,7 +253,7 @@ export function BotPage() {
             <div>
               <h2 className="text-2xl font-bold text-white">My Active Bot</h2>
               <p className="text-sm text-[#8b949e]">
-                {botActive ? 'Running: Scalper Pro' : 'No bot currently running'}
+                {effectiveBotActive ? 'Running: Scalper Pro' : 'No bot currently running'}
               </p>
             </div>
           </div>

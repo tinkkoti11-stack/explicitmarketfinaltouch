@@ -135,7 +135,7 @@ export type PurchasedBot = {
   dailyReturn?: number; // 5-15% range
   durationDays?: number; // How many days admin set for bot to run
   durationValue?: string; // Duration value (e.g., "7")
-  durationType?: 'hours' | 'days'; // Duration type
+  durationType?: 'minutes' | 'hours' | 'days'; // Duration type
   maxDrawdown?: number; // Optional: max allowed loss % before auto-stop
   outcome?: 'win' | 'lose'; // Admin choice for bot behavior
 };
@@ -147,7 +147,7 @@ export type PurchasedSignal = {
   providerName: string;
   allocation: number; // capital locked for signal trading
   cost: number; // one-time subscription paid upfront
-  status: 'PENDING_APPROVAL' | 'ACTIVE' | 'EXPIRED' | 'CLOSED';
+  status: 'PENDING_APPROVAL' | 'APPROVED_FOR_ALLOCATION' | 'ACTIVE' | 'EXPIRED' | 'CLOSED';
   subscribedAt: number;
   approvedAt?: number;
   tradesFollowed: number; // total trades executed
@@ -164,7 +164,7 @@ export type PurchasedSignal = {
   }>;
   outcome?: 'win' | 'lose'; // Admin choice for signal behavior
   durationValue?: string; // Duration value (e.g., "7")
-  durationType?: 'hours' | 'days'; // Duration type
+  durationType?: 'minutes' | 'hours' | 'days'; // Duration type
   endDate?: number; // When signal trading will auto-close
   startedAt?: number; // When signal trading actually started
 };

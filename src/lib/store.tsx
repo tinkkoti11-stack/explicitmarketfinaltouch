@@ -267,6 +267,7 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
     return [];
   });
   const [botActive, setBotActive] = useState(false);
+
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
       const savedTheme = localStorage.getItem('theme');
@@ -275,6 +276,14 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
     return 'dark';
   });
   const [purchasedBots, setPurchasedBots] = useState<PurchasedBot[]>([]);
+
+  useEffect(() => {
+    if (!botActive && purchasedBots.some((b) => b.status === 'ACTIVE' && b.allocatedAmount > 0)) {
+      console.log('🟢 Found ACTIVE purchased bot(s), enabling botActive on login');
+      setBotActive(true);
+    }
+  }, [purchasedBots, botActive]);
+
   const [purchasedSignals, setPurchasedSignals] = useState<PurchasedSignal[]>([]);
   const [purchasedCopyTrades, setPurchasedCopyTrades] = useState<CopyTrade[]>([]);
   const [purchasedFundedAccounts, setPurchasedFundedAccounts] = useState<FundedAccountPurchase[]>([]);
@@ -721,35 +730,6 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
           
           const now = Date.now();
           
-          // Check if bot duration has expired
-          if (bot.endDate && now >= bot.endDate) {
-            // Auto-close bot - duration expired
-            // Refund allocated amount + total earnings to user
-            const totalRefund = bot.allocatedAmount + bot.totalEarned;
-            
-            setAllUsers((prevUsers) =>
-              prevUsers.map((u) =>
-                u.id === bot.userId
-                  ? { ...u, balance: (u.balance || 0) + totalRefund }
-                  : u
-              )
-            );
-            
-            // Update current user's balance if they're logged in
-            if (user && user.id === bot.userId) {
-              const newBal = (user.balance || 0) + totalRefund;
-              setUser({ ...user, balance: newBal });
-              setAccount((prev) => ({ ...prev, balance: newBal }));
-            }
-            
-            console.log(`✅ Bot CLOSED: "${bot.botName}" refunded $${totalRefund.toFixed(2)}`);
-            
-            return {
-              ...bot,
-              status: 'CLOSED'
-            };
-          }
-          
           // Calculate earnings based on performance (daily return % per 3-second interval)
           // If 10% daily return, that means 10% of allocation per day
           // Over 3 seconds: (10% / 86400 seconds) * 3 seconds
@@ -776,6 +756,21 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
             console.log(`📈 ${bot.botName}: +$${profitOrLoss.toFixed(6)} (Total: $${newTotalEarned.toFixed(2)})`);
           }
           
+          // Sync to database immediately
+          supabase
+            .from('user_bots')
+            .update({
+              total_earned: newTotalEarned,
+              total_lost: bot.totalLost,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', bot.id)
+            .then(({ error }) => {
+              if (error) {
+                console.error(`❌ Failed to sync earnings for ${bot.botName}:`, error.message);
+              }
+            });
+          
           return {
             ...bot,
             totalEarned: newTotalEarned,
@@ -784,31 +779,25 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
         });
         
         return updated;
-      );
+      });
     }, 3000); // Every 3 seconds
     
     return () => clearInterval(botEarningsInterval);
-  }, [user]);
+  }, []); // Remove user dependency so it runs even when logged out
 
   // Sync bot earnings to Supabase every 10 seconds
   useEffect(() => {
-    if (!user) {
-      console.log('⏸️ Earnings sync paused - user not logged in');
-      return;
-    }
-    
-    console.log('🔄 Starting earnings sync interval for user:', user.email);
+    console.log('🔄 Starting earnings sync interval (runs regardless of login status)');
     
     const syncInterval = setInterval(async () => {
       setPurchasedBots((currentBots) => {
-        const activeBots = currentBots.filter(b => b.status === 'ACTIVE' && b.userId === user.id);
+        const activeBots = currentBots.filter(b => b.status === 'ACTIVE');
         
         if (activeBots.length === 0) {
-          console.log('⏭️ No active bots to sync');
           return currentBots;
         }
         
-        console.log(`⏳ Syncing ${activeBots.length} active bot(s)...`);
+        console.log(`⏳ Syncing ${activeBots.length} active bot(s) to database...`);
         
         // Sync all active bots to Supabase
         activeBots.forEach((bot) => {
@@ -817,8 +806,6 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
             total_lost: bot.totalLost,
             updated_at: new Date().toISOString()
           };
-          
-          console.log(`📤 Uploading ${bot.botName}: earned=$${bot.totalEarned.toFixed(2)}, allocated=$${bot.allocatedAmount.toFixed(2)}`);
           
           supabase
             .from('user_bots')
@@ -839,9 +826,9 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
     
     return () => {
       clearInterval(syncInterval);
-      console.log('🛑 Earnings sync stopped');
+      console.log('🔌 Earnings sync stopped');
     };
-  }, [user]);
+  }, []); // Run regardless of login status
 
   // Signal Earnings Simulation (every 5 seconds with win rate-based spread calculation)
   useEffect(() => {
@@ -1080,6 +1067,77 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
     };
   }, [user]);
 
+  // Admin real-time subscription for ALL user_bots (for admin dashboard updates)
+  useEffect(() => {
+    if (!user?.id || !user.is_admin) return;
+
+    console.log('🛡️ Setting up admin real-time subscription for ALL bot changes...');
+    
+    const adminSubscription = supabase
+      .channel('admin_user_bots_all')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_bots'
+        },
+        (payload: any) => {
+          console.log('🔔 Admin received bot change:', payload.eventType);
+          
+          if (payload.eventType === 'UPDATE') {
+            const updatedBot = payload.new;
+            // Refresh admin dashboard with updated bot info
+            setPurchasedBots((prev) =>
+              prev.map((bot) => {
+                if (bot.id !== updatedBot.id) return bot;
+                return {
+                  ...bot,
+                  status: updatedBot.status || bot.status,
+                  allocatedAmount: updatedBot.allocated_amount ?? bot.allocatedAmount,
+                  totalEarned: updatedBot.total_earned ?? bot.totalEarned,
+                  totalLost: updatedBot.total_lost ?? bot.totalLost
+                };
+              })
+            );
+          } else if (payload.eventType === 'INSERT') {
+            const newBot = payload.new;
+            const convertedBot: PurchasedBot = {
+              id: newBot.id,
+              userId: newBot.user_id,
+              botId: newBot.id, // Use the purchase ID as botId
+              botName: newBot.bot_name,
+              allocatedAmount: newBot.allocated_amount || 0,
+              totalEarned: newBot.total_earned || 0,
+              totalLost: newBot.total_lost || 0,
+              status: newBot.status,
+              purchasedAt: new Date(newBot.created_at).getTime(),
+              approvedAt: newBot.approved_at ? new Date(newBot.approved_at).getTime() : undefined,
+              performance: newBot.performance,
+              dailyReturn: newBot.daily_return,
+              durationValue: newBot.duration_value,
+              durationType: newBot.duration_type,
+              maxDurationMs: newBot.max_duration_ms,
+              endDate: newBot.end_date ? new Date(newBot.end_date).getTime() : undefined,
+              outcome: newBot.outcome,
+              startedAt: newBot.started_at ? new Date(newBot.started_at).getTime() : undefined
+            };
+            setPurchasedBots((prev) => [convertedBot, ...prev]);
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Admin real-time subscription active');
+        }
+      });
+
+    return () => {
+      console.log('🔌 Unsubscribing from admin real-time updates');
+      supabase.removeChannel(adminSubscription);
+    };
+  }, [user?.id, user?.is_admin]);
+
   // Subscribe to user_balances changes for real-time balance sync
   useEffect(() => {
     if (!user) return;
@@ -1258,6 +1316,47 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
           console.log('ℹ️ No credit card deposits found');
         }
 
+        // 4. Load all user bots for admin approval management
+        console.log('🤖 Loading all user bots for admin...');
+        const { data: allBots, error: botsError } = await supabase
+          .from('user_bots')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (botsError) {
+          console.error('❌ Error loading all bots:', botsError.message);
+        } else if (allBots && allBots.length > 0) {
+          console.log('✅ Loaded', allBots.length, 'user bots from all users');
+          const convertedBots: PurchasedBot[] = allBots.map((b: any) => ({
+            id: b.id,
+            userId: b.user_id,
+            botId: b.id, // Use purchase ID as botId
+            botName: b.bot_name,
+            allocatedAmount: b.allocated_amount || 0,
+            totalEarned: b.total_earned || 0,
+            totalLost: b.total_lost || 0,
+            status: b.status,
+            purchasedAt: new Date(b.created_at).getTime(),
+            approvedAt: b.approved_at ? new Date(b.approved_at).getTime() : undefined,
+            performance: b.performance,
+            dailyReturn: b.daily_return,
+            durationValue: b.duration_value,
+            durationType: b.duration_type,
+            maxDurationMs: b.max_duration_ms,
+            endDate: b.end_date ? new Date(b.end_date).getTime() : undefined,
+            outcome: b.outcome,
+            startedAt: b.started_at ? new Date(b.started_at).getTime() : undefined
+          }));
+          setPurchasedBots(convertedBots);
+          console.log('✅ Admin purchasedBots state updated with all bots');
+          // Set botActive based on loaded bots (for admin, if any bot is active globally)
+          const hasActiveBots = convertedBots.some(b => b.status === 'ACTIVE' && b.allocatedAmount > 0);
+          setBotActive(hasActiveBots);
+        } else {
+          console.log('ℹ️ No user bots found');
+          setBotActive(false);
+        }
+
       } else {
         // ===== REGULAR USER: Load only THEIR data =====
         console.log('👤 User login - loading their data for user:', userId);
@@ -1379,8 +1478,12 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
             startedAt: b.started_at ? new Date(b.started_at).getTime() : undefined
           }));
           setPurchasedBots(convertedBots);
+          // Set botActive based on loaded bots
+          const hasActiveBots = convertedBots.some(b => b.status === 'ACTIVE' && b.allocatedAmount > 0);
+          setBotActive(hasActiveBots);
         } else {
           console.log('ℹ️ No purchased bots found for user');
+          setBotActive(false);
         }
 
         // 5. Load user purchased signals
@@ -1497,6 +1600,8 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
   };
 
   const login = async (email: string, password?: string, signupData?: { fullName: string; phone: string; country: string; password: string; referralCode?: string }) => {
+    // Reset botActive on login
+    setBotActive(false);
     // Admin authentication
     if (email === 'admin@work.com' && password === 'admin') {
       const adminUser = allUsers.find(u => u.id === 'admin-1') || {
@@ -1754,6 +1859,7 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
 
   const logout = () => {
     setUser(null);
+    setBotActive(false);
   };
 
   const toggleTheme = () => {
