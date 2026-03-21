@@ -489,11 +489,16 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
           const elapsed = now - copy.startDate;
           const progress = Math.min(elapsed / durationMs, 1);
           
-          // Expected profit = allocation × (traderReturn / 100)
-          const expectedProfit = copy.allocation * ((copy.traderReturn || 0) / 100);
+          // Expected daily profit = allocation × (traderReturn / 100)
+          const expectedDailyProfit = copy.allocation * ((copy.traderReturn || 0) / 100);
+          
+          // Calculate duration in hours
+          const durationHours = durationMs / (60 * 60 * 1000);
+          
+          // Total expected profit proportional to duration (daily profit × duration ratio)
+          const totalExpectedProfit = expectedDailyProfit * (durationHours / 24);
           
           // Calculate incremental profit for this 20-second period
-          const totalExpectedProfit = expectedProfit;
           const profitPerPeriod = totalExpectedProfit / (durationMs / 20000); // Divide total profit by number of 20-second periods
           
           // Add natural fluctuation using sine wave (±15%)
@@ -838,6 +843,9 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
           if (signal.status !== 'ACTIVE' || !signal.allocation || !signal.endDate || !signal.startedAt) return signal;
           
           const now = Date.now();
+          
+          // Stop earning if duration has expired
+          if (now >= signal.endDate) return signal;
           
           // Calculate total duration and number of 5-second intervals
           const totalDurationMs = signal.endDate - signal.startedAt;

@@ -12,12 +12,12 @@ import {
 } from 'lucide-react';
 
 const AVAILABLE_TRADERS = [
-  { id: 1, name: 'Alex Thompson', winRate: '84%', return: '+124%', followers: 1205, risk: 'Low', dailyReturn: '9.2%', trades: 324 },
-  { id: 2, name: 'Sarah Chen', winRate: '79%', return: '+89%', followers: 850, risk: 'Medium', dailyReturn: '7.8%', trades: 215 },
-  { id: 3, name: 'Marco Rossi', winRate: '92%', return: '+215%', followers: 3400, risk: 'High', dailyReturn: '11.3%', trades: 512 },
-  { id: 4, name: 'Elena Petrova', winRate: '81%', return: '+67%', followers: 420, risk: 'Low', dailyReturn: '7.5%', trades: 189 },
-  { id: 5, name: 'James Wilson', winRate: '77%', return: '+45%', followers: 640, risk: 'Medium', dailyReturn: '8.6%', trades: 156 },
-  { id: 6, name: 'Lisa Anderson', winRate: '88%', return: '+178%', followers: 2100, risk: 'High', dailyReturn: '10.9%', trades: 398 },
+  { id: 1, name: 'Alex Thompson', winRate: '84%', return: '+124%', followers: 1205, risk: 'Low', dailyReturn: '124%', trades: 324 },
+  { id: 2, name: 'Sarah Chen', winRate: '79%', return: '+89%', followers: 850, risk: 'Medium', dailyReturn: '89%', trades: 215 },
+  { id: 3, name: 'Marco Rossi', winRate: '92%', return: '+215%', followers: 3400, risk: 'High', dailyReturn: '215%', trades: 512 },
+  { id: 4, name: 'Elena Petrova', winRate: '81%', return: '+67%', followers: 420, risk: 'Low', dailyReturn: '67%', trades: 189 },
+  { id: 5, name: 'James Wilson', winRate: '77%', return: '+45%', followers: 640, risk: 'Medium', dailyReturn: '45%', trades: 156 },
+  { id: 6, name: 'Lisa Anderson', winRate: '88%', return: '+178%', followers: 2100, risk: 'High', dailyReturn: '178%', trades: 398 },
 ];
 
 export function CopyTradingPage() {
