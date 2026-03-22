@@ -1827,36 +1827,43 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
           console.log('ℹ️ No KYC data found for user');
         }
 
-        // 9. Load user wallet addresses
-        console.log('🟡 [LOAD] Loading user wallet addresses for userId:', userId);
-        const { data: walletData, error: walletError } = await supabase
-          .from('user_wallet_addresses')
+        // 9. Load system wallets (active deposit wallets available to all users)
+        console.log('🟡 [LOAD] Loading system wallets');
+        // Load ALL wallets for admin, only active for regular users
+        let systemWalletQuery = supabase
+          .from('system_wallets')
           .select('*')
-          .eq('user_id', userId)
           .order('created_at', { ascending: false });
 
-        if (walletError) {
-          console.error('🔴 [LOAD] Error querying wallet addresses:', walletError.message);
-          console.log('ℹ️ No wallet addresses found or error:', walletError.message);
-          setWallets([]);
-        } else if (walletData && walletData.length > 0) {
-          console.log('✅ [LOAD] Loaded', walletData.length, 'wallet addresses for user');
-          console.log('🟡 [LOAD] Wallet data from Supabase:', walletData);
-          const convertedWallets: Wallet[] = walletData.map((w: any) => ({
+        // Only filter active wallets for regular users
+        if (!isAdmin) {
+          systemWalletQuery = systemWalletQuery.eq('is_active', true);
+        }
+
+        const { data: systemWalletData, error: systemWalletError } = await systemWalletQuery;
+
+        if (systemWalletError) {
+          console.error('🔴 [LOAD] Error querying system wallets:', systemWalletError.message);
+          console.log('ℹ️ No system wallets found or error:', systemWalletError.message);
+          setSystemWallets([]);
+        } else if (systemWalletData && systemWalletData.length > 0) {
+          console.log('✅ [LOAD] Loaded', systemWalletData.length, 'system wallets' + (isAdmin ? ' (all for admin)' : ' (active only)'));
+          console.log('🟡 [LOAD] System wallet data from Supabase:', systemWalletData);
+          const convertedSystemWallets: SystemWallet[] = systemWalletData.map((w: any) => ({
             id: w.id,
-            userId: w.user_id,
-            address: w.address,
-            label: w.label,
-            type: w.type,
-            currency: w.currency,
+            name: w.name,
+            cryptoId: w.crypto_id,
             network: w.network,
+            address: w.address,
+            minDeposit: parseFloat(w.min_deposit),
+            isActive: w.is_active,
             createdAt: new Date(w.created_at).getTime()
           }));
-          console.log('✅ [LOAD] Converted wallets:', convertedWallets);
-          setWallets(convertedWallets);
+          console.log('✅ [LOAD] Converted system wallets:', convertedSystemWallets);
+          setSystemWallets(convertedSystemWallets);
         } else {
-          console.log('ℹ️ No wallet addresses found for user');
-          setWallets([]);
+          console.log('ℹ️ No system wallets found');
+          setSystemWallets([]);
         }
       }
 
@@ -3873,46 +3880,131 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
   };
 
   // System Wallet Methods (Admin - Global Deposit Address Management)
-  const addSystemWallet = (name: string, cryptoId: string, network: string, address: string, minDeposit: number) => {
-    const newSystemWallet: SystemWallet = {
-      id: generateId(),
-      name,
-      cryptoId,
-      network,
-      address,
-      minDeposit,
-      isActive: true,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-    setSystemWallets((prev) => [...prev, newSystemWallet]);
-    alert('✅ System wallet added successfully');
+  const addSystemWallet = async (name: string, cryptoId: string, network: string, address: string, minDeposit: number) => {
+    try {
+      const { data, error } = await supabase
+        .from('system_wallets')
+        .insert([
+          {
+            name,
+            crypto_id: cryptoId,
+            network,
+            address,
+            min_deposit: minDeposit,
+            is_active: true
+          }
+        ])
+        .select();
+
+      if (error) {
+        console.error('❌ Error adding system wallet:', error.message);
+        alert('❌ Failed to add wallet: ' + error.message);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const w = data[0];
+        const newSystemWallet: SystemWallet = {
+          id: w.id,
+          name: w.name,
+          cryptoId: w.crypto_id,
+          network: w.network,
+          address: w.address,
+          minDeposit: parseFloat(w.min_deposit),
+          isActive: w.is_active,
+          createdAt: new Date(w.created_at).getTime()
+        };
+        setSystemWallets((prev) => [...prev, newSystemWallet]);
+        alert('✅ System wallet added successfully');
+      }
+    } catch (err: any) {
+      console.error('Error adding system wallet:', err.message);
+      alert('❌ Error adding wallet: ' + err.message);
+    }
   };
 
-  const editSystemWallet = (walletId: string, updates: Partial<SystemWallet>) => {
-    setSystemWallets((prev) =>
-      prev.map((wallet) =>
-        wallet.id === walletId
-          ? { ...wallet, ...updates, updatedAt: Date.now() }
-          : wallet
-      )
-    );
-    alert('✅ System wallet updated successfully');
+  const editSystemWallet = async (walletId: string, updates: Partial<SystemWallet>) => {
+    try {
+      const updateData: any = {};
+      if (updates.name !== undefined) updateData.name = updates.name;
+      if (updates.cryptoId !== undefined) updateData.crypto_id = updates.cryptoId;
+      if (updates.network !== undefined) updateData.network = updates.network;
+      if (updates.address !== undefined) updateData.address = updates.address;
+      if (updates.minDeposit !== undefined) updateData.min_deposit = updates.minDeposit;
+      if (updates.isActive !== undefined) updateData.is_active = updates.isActive;
+
+      const { error } = await supabase
+        .from('system_wallets')
+        .update(updateData)
+        .eq('id', walletId);
+
+      if (error) {
+        console.error('❌ Error updating system wallet:', error.message);
+        alert('❌ Failed to update wallet: ' + error.message);
+        return;
+      }
+
+      setSystemWallets((prev) =>
+        prev.map((wallet) =>
+          wallet.id === walletId
+            ? { ...wallet, ...updates, createdAt: wallet.createdAt }
+            : wallet
+        )
+      );
+      alert('✅ System wallet updated successfully');
+    } catch (err: any) {
+      console.error('Error updating system wallet:', err.message);
+      alert('❌ Error updating wallet: ' + err.message);
+    }
   };
 
-  const removeSystemWallet = (walletId: string) => {
-    setSystemWallets((prev) => prev.filter((w) => w.id !== walletId));
-    alert('✅ System wallet removed');
+  const removeSystemWallet = async (walletId: string) => {
+    try {
+      const { error } = await supabase
+        .from('system_wallets')
+        .delete()
+        .eq('id', walletId);
+
+      if (error) {
+        console.error('❌ Error deleting system wallet:', error.message);
+        alert('❌ Failed to delete wallet: ' + error.message);
+        return;
+      }
+
+      setSystemWallets((prev) => prev.filter((w) => w.id !== walletId));
+      alert('✅ System wallet removed');
+    } catch (err: any) {
+      console.error('Error deleting system wallet:', err.message);
+      alert('❌ Error deleting wallet: ' + err.message);
+    }
   };
 
-  const toggleSystemWalletStatus = (walletId: string) => {
-    setSystemWallets((prev) =>
-      prev.map((wallet) =>
-        wallet.id === walletId
-          ? { ...wallet, isActive: !wallet.isActive, updatedAt: Date.now() }
-          : wallet
-      )
-    );
+  const toggleSystemWalletStatus = async (walletId: string) => {
+    try {
+      const wallet = systemWallets.find((w) => w.id === walletId);
+      if (!wallet) return;
+
+      const newStatus = !wallet.isActive;
+      const { error } = await supabase
+        .from('system_wallets')
+        .update({ is_active: newStatus })
+        .eq('id', walletId);
+
+      if (error) {
+        console.error('❌ Error toggling wallet status:', error.message);
+        alert('❌ Failed to toggle wallet: ' + error.message);
+        return;
+      }
+
+      setSystemWallets((prev) =>
+        prev.map((w) =>
+          w.id === walletId ? { ...w, isActive: newStatus } : w
+        )
+      );
+    } catch (err: any) {
+      console.error('Error toggling wallet status:', err.message);
+      alert('❌ Error toggling wallet: ' + err.message);
+    }
   };
 
   // Credit Card Deposit Methods

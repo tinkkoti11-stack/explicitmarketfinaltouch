@@ -23,20 +23,6 @@ import {
 export function WalletPage() {
   const { account, deposit, withdraw, transactions, user, getUserTransactions, systemWallets, bankAccounts, submitCreditCardDeposit } = useStore();
   const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw' | 'history' | 'overview'>('overview');
-
-  // Debug user wallets on page load
-  React.useEffect(() => {
-    console.log('🟡 [WALLET-PAGE] User wallets:', user?.wallets);
-    console.log('🟡 [WALLET-PAGE] Full user object:', user);
-    if (user?.wallets && user.wallets.length > 0) {
-      console.log('✅ [WALLET-PAGE] Found', user.wallets.length, 'wallet addresses:');
-      user.wallets.forEach((w: any) => {
-        console.log(`  - ${w.label} (${w.type}): ${w.address} [${w.currency} - ${w.network || 'N/A'}]`);
-      });
-    } else {
-      console.log('ℹ️ [WALLET-PAGE] No wallet addresses found for user');
-    }
-  }, [user]);
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('crypto');
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
@@ -475,7 +461,7 @@ export function WalletPage() {
               </div>
             )}
 
-            {user?.wallets && user.wallets.length === 0 && (
+            {activeWallets.length === 0 && (
               <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-6">
                 <p className="text-blue-400 text-sm">
                   📋 No wallet addresses assigned yet. Please contact support to get your deposit addresses configured.
