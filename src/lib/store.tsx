@@ -253,7 +253,8 @@ interface StoreContextType {
   approveReferral: (referralId: string) => void;
   rejectReferral: (referralId: string) => void;
   manuallyAddReferral: (userId: string, referrerUserId: string, bonusAmount?: number) => void;
-  adjustReferralBonus: (referralId: string, newBonusAmount: number) => void;
+  adjustReferralBonus: (referralId: string, newBonusAmount: number) => Promise<void>;
+  adjustReferrerEarnings: (userId: string, newEarnings: number) => Promise<void>;
 }
 const StoreContext = createContext<StoreContextType | null>(null);
 
@@ -1766,7 +1767,9 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
           console.log('ℹ️ No copy trades found for user');
         }
 
-        // 7. Load recent trades history
+        // 7. Skip referral load here; handled after the admin block to work for both admin and regular users
+
+        // 8. Load recent trades history
         console.log('Loading recent trades...');
         const { data: userRecentTrades, error: tradesError } = await supabase
           .from('recent_trades')
@@ -1799,7 +1802,7 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
           setRecentTrades([]);
         }
 
-        // 8. Load user KYC data
+        // 9. Load user KYC data
         console.log('Loading user KYC data...');
         const { data: kycData } = await supabase
           .from('kyc_verifications')
@@ -1827,7 +1830,7 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
           console.log('ℹ️ No KYC data found for user');
         }
 
-        // 9. Load system wallets (active deposit wallets available to all users)
+        // 10. Load system wallets (active deposit wallets available to all users)
         console.log('🟡 [LOAD] Loading system wallets');
         // Load ALL wallets for admin, only active for regular users
         let systemWalletQuery = supabase
@@ -1866,7 +1869,7 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
           setSystemWallets([]);
         }
 
-        // 10. Load bot templates (admin creates, users can purchase)
+        // 11. Load bot templates (admin creates, users can purchase)
         console.log('🤖 [LOAD] Loading bot templates');
         let botTemplateQuery = supabase
           .from('bot_templates')
@@ -1909,7 +1912,7 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
           setBotTemplates([]);
         }
 
-        // 11. Load signal templates (admin creates, users can subscribe)
+        // 12. Load signal templates (admin creates, users can subscribe)
         console.log('⚡ [LOAD] Loading signal templates');
         let signalTemplateQuery = supabase
           .from('signal_templates')
@@ -1953,7 +1956,68 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
         }
       }
 
-      // Phase 12: Load copy trade templates
+      // Load referral records (admin: all, otherwise only where they are the referrer)
+      console.log('💰 Loading referral records for user:', userId, '(isAdmin:', isAdmin, ')');
+      let referralQuery = supabase
+        .from('referral_records')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!isAdmin) {
+        // For regular users, load referrals where THEY ARE THE REFERRER (people they referred)
+        console.log(`  ℹ️ Non-admin user - loading referrals WHERE referrer_id = ${userId}`);
+        referralQuery = referralQuery.eq('referrer_id', userId);
+      } else {
+        console.log('  👑 Admin user - loading ALL referrals');
+      }
+
+      const { data: referralData, error: referralError } = await referralQuery;
+      if (referralError) {
+        console.error('❌ Error loading referral records from Supabase:', referralError.message);
+        console.error('   Full error:', JSON.stringify(referralError, null, 2));
+        console.error('   Query was for user:', userId, 'isAdmin:', isAdmin);
+        setReferralRecords([]);
+      } else if (referralData && referralData.length > 0) {
+        console.log('✅ Loaded', referralData.length, 'REFERRER referral records for user', userId);
+        console.log('   Records where this user is referrer:');
+        referralData.forEach((r: any, i: number) => {
+          console.log(`   [${i}] referred: ${r.referred_user_name} (${r.referred_user_email}), status: ${r.status}, bonus: $${r.bonus_amount}`);
+        });
+        const convertedReferrals: Array<{
+          id: string;
+          referrerId: string;
+          referredUserId: string;
+          referredUserEmail: string;
+          referredUserName: string;
+          bonusAmount: number;
+          status: 'PENDING' | 'COMPLETED' | 'REJECTED';
+          createdAt: number;
+          completedAt?: number;
+        }> = referralData.map((r: any) => ({
+          id: r.id,
+          referrerId: r.referrer_id,
+          referredUserId: r.referred_user_id,
+          referredUserEmail: r.referred_user_email,
+          referredUserName: r.referred_user_name,
+          bonusAmount: r.bonus_amount,
+          status: r.status,
+          createdAt: new Date(r.created_at).getTime(),
+          completedAt: r.completed_at ? new Date(r.completed_at).getTime() : undefined
+        }));
+        console.log('   ✅ Converted', convertedReferrals.length, 'referral records to internal format');
+        setReferralRecords(convertedReferrals);
+      } else {
+        console.log('⚠️  No referral records found for user', userId);
+        console.log('   This means: they have NOT made any referrals yet, OR the records are stored elsewhere');
+        console.log('   BUT their user object shows:');
+        if (user) {
+          console.log('     - totalReferrals:', user.totalReferrals || 0);
+          console.log('     - referralEarnings:', user.referralEarnings || 0);
+        }
+        setReferralRecords([]);
+      }
+
+      // Phase 13: Load copy trade templates
       console.log('📥 [LOAD] Phase 12: Loading copy trade templates...');
       if (supabase) {
         let copyTradeQuery = supabase.from('copy_trade_templates').select('*');
@@ -2136,10 +2200,12 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
             kycStatus: undefined
           };
           
+          // Declare referrerId outside try block so it's accessible in referral record creation below
+          let referrerId: string | null = null;
+          
           // Write new user to Supabase user_profiles table
           try {
             // If a referral code is provided, look up the referrer's user ID
-            let referrerId = null;
             if (signupData.referralCode && signupData.referralCode.trim()) {
               const { data: referrer, error: referrerError } = await supabase
                 .from('user_profiles')
@@ -2183,98 +2249,106 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
               loginUser.id = createdUser.id;
             }
 
-            // Write user balance to Supabase user_balances table
+            // Write user balance to Supabase user_balances table (use upsert in case it already exists)
             const { error: balanceError } = await supabase
               .from('user_balances')
-              .insert({
+              .upsert({
                 user_id: loginUser.id,
                 balance: 4000,
                 equity: 4000,
                 free_margin: 4000
-              });
+              }, { onConflict: 'user_id' });
 
             if (balanceError) {
-              console.error('Error creating user balance:', JSON.stringify(balanceError, null, 2));
+              console.error('❌ Error with user balance:', JSON.stringify(balanceError, null, 2));
               // Don't fail - user was created, just balance wasn't recorded
+            } else {
+              console.log('✅ User balance created/updated successfully');
             }
           } catch (err: any) {
             console.error('Supabase error:', JSON.stringify(err, null, 2));
             // Continue with local storage even if Supabase fails
           }
           
-          // If this user was referred by someone, validate & track it
-          if (signupData.referralCode && signupData.referralCode.trim()) {
-            const referrer = allUsers.find(u => u.referralCode === signupData.referralCode.trim());
-            if (referrer) {
-              // Valid referral code found
-              const referralRecord = {
-                id: generateId(),
-                referrerId: referrer.id,
-                referredUserId: loginUser.id,
-                referredUserEmail: email,
-                referredUserName: signupData.fullName,
-                bonusAmount: 25,
-                status: 'PENDING' as const,
-                createdAt: Date.now()
-              };
+          // If this user was referred by someone, create the referral record using referrerId from Supabase lookup
+          if (signupData.referralCode && signupData.referralCode.trim() && referrerId) {
+            // We already have referrerId from the Supabase lookup above
+            const referralRecord = {
+              id: generateId(),
+              referrerId: referrerId,
+              referredUserId: loginUser.id,
+              referredUserEmail: email,
+              referredUserName: signupData.fullName,
+              bonusAmount: 25,
+              status: 'PENDING' as const,
+              createdAt: Date.now()
+            };
+            
+            console.log('📝 Creating referral record:', referralRecord);
+            
+            // Write referral record to Supabase
+            try {
+              const { error: refError } = await supabase
+                .from('referral_records')
+                .insert({
+                  id: referralRecord.id,
+                  referrer_id: referrerId,
+                  referred_user_id: loginUser.id,
+                  referred_user_email: email,
+                  referred_user_name: signupData.fullName,
+                  bonus_amount: 25,
+                  status: 'PENDING',
+                  created_at: new Date().toISOString()
+                });
               
-              // Write referral record to Supabase
-              try {
-                await supabase
-                  .from('referral_records')
-                  .insert({
-                    id: referralRecord.id,
-                    referrer_id: referrer.id,
-                    referred_user_id: loginUser.id,
-                    referred_user_email: email,
-                    referred_user_name: signupData.fullName,
-                    bonus_amount: 25,
-                    status: 'PENDING',
-                    created_at: new Date().toISOString()
-                  });
-              } catch (err) {
-                console.error('Error recording referral:', err);
+              if (refError) {
+                console.error('❌ Error recording referral in Supabase:', refError);
+              } else {
+                console.log('✅ Referral record created in Supabase');
               }
+            } catch (err) {
+              console.error('❌ Error recording referral:', err);
+            }
+            
+            // Add to local state
+            setReferralRecords(prev => [...prev, referralRecord]);
+            
+            // Update referrer's stats in Supabase (increment total_referrals and add bonus_amount)
+            try {
+              // First, get the current referrer stats from Supabase
+              const { data: referrerData, error: referrerError } = await supabase
+                .from('user_profiles')
+                .select('total_referrals, referral_earnings')
+                .eq('id', referrerId)
+                .single();
               
-              setReferralRecords(prev => [...prev, referralRecord]);
-              
-              // Update referrer's stats in BOTH local state and Supabase
-              setAllUsers(prev => 
-                prev.map(u => 
-                  u.id === referrer.id
-                    ? { 
-                        ...u, 
-                        totalReferrals: (u.totalReferrals || 0) + 1,
-                        referralEarnings: (u.referralEarnings || 0) + 25
-                      }
-                    : u
-                )
-              );
-
-              // Update referrer's stats in Supabase
-              try {
+              if (referrerError) {
+                console.error('❌ Error fetching referrer stats:', referrerError);
+              } else if (referrerData) {
+                const newTotalReferrals = (referrerData.total_referrals || 0) + 1;
+                const newReferralEarnings = (referrerData.referral_earnings || 0) + 25;
+                
                 const { error: updateError } = await supabase
                   .from('user_profiles')
                   .update({
-                    total_referrals: (referrer.totalReferrals || 0) + 1,
-                    referral_earnings: (referrer.referralEarnings || 0) + 25
+                    total_referrals: newTotalReferrals,
+                    referral_earnings: newReferralEarnings
                   })
-                  .eq('id', referrer.id);
+                  .eq('id', referrerId);
 
                 if (updateError) {
-                  console.error('Error updating referrer stats in Supabase:', updateError);
+                  console.error('❌ Error updating referrer stats in Supabase:', updateError);
                 } else {
                   console.log('✅ Referrer stats updated in Supabase:', {
-                    referrer_id: referrer.id,
-                    total_referrals: (referrer.totalReferrals || 0) + 1,
-                    referral_earnings: (referrer.referralEarnings || 0) + 25
+                    referrer_id: referrerId,
+                    total_referrals: newTotalReferrals,
+                    referral_earnings: newReferralEarnings
                   });
                 }
-              } catch (err) {
-                console.error('Error updating referrer stats:', err);
               }
+            } catch (err) {
+              console.error('❌ Error updating referrer stats:', err);
             }
-            // If referral code invalid, just skip it (don't error)
           }
           
           setAllUsers((prev) => [...prev, loginUser]);
@@ -4943,7 +5017,10 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
       )
     );
 
-    // Add $25 bonus to referrer's balance (not just pending)
+    // Use actual bonus amount from the referral (accounts for adjustments)
+    const bonusAmount = referral.bonusAmount || 25;
+
+    // Add bonus to referrer's balance
     const referrer = allUsers.find(u => u.id === referral.referrerId);
     if (referrer) {
       setAllUsers(prev =>
@@ -4951,8 +5028,8 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
           u.id === referral.referrerId
             ? {
                 ...u,
-                balance: (u.balance || 0) + 25,
-                referralEarnings: (u.referralEarnings || 0) + 25,
+                balance: (u.balance || 0) + bonusAmount,
+                referralEarnings: (u.referralEarnings || 0) + bonusAmount,
                 totalReferrals: (u.totalReferrals || 0) + 1
               }
             : u
@@ -4961,11 +5038,11 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
 
       // If logged-in user is the referrer, update their state
       if (user && user.id === referral.referrerId) {
-        const newBal = (user.balance || 0) + 25;
+        const newBal = (user.balance || 0) + bonusAmount;
         setUser({
           ...user,
           balance: newBal,
-          referralEarnings: (user.referralEarnings || 0) + 25,
+          referralEarnings: (user.referralEarnings || 0) + bonusAmount,
           totalReferrals: (user.totalReferrals || 0) + 1
         });
         setAccount(prev => ({ ...prev, balance: newBal }));
@@ -4985,7 +5062,7 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
         });
 
       // Update Supabase referrer's balance
-      const newBalance = (referrer.balance || 0) + 25;
+      const newBalance = (referrer.balance || 0) + bonusAmount;
       supabase
         .from('user_balances')
         .update({ balance: newBalance })
@@ -5002,7 +5079,7 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
       supabase
         .from('user_profiles')
         .update({
-          referral_earnings: (referrer.referralEarnings || 0) + 25,
+          referral_earnings: (referrer.referralEarnings || 0) + bonusAmount,
           total_referrals: (referrer.totalReferrals || 0) + 1
         })
         .eq('id', referrer.id)
@@ -5015,12 +5092,12 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
         });
     }
 
-    // Create transaction record
+    // Create transaction record with actual bonus amount
     const tx: Transaction = {
       id: generateId(),
       userId: referral.referrerId,
       type: 'REFERRAL_BONUS',
-      amount: 25,
+      amount: bonusAmount,
       method: 'admin_approval',
       status: 'COMPLETED',
       date: Date.now()
@@ -5165,14 +5242,19 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
     setTransactions(prev => [tx, ...prev]);
   };
 
-  const adjustReferralBonus = (referralId: string, newBonusAmount: number) => {
+  const adjustReferralBonus = async (referralId: string, newBonusAmount: number) => {
     const referral = referralRecords.find(r => r.id === referralId);
-    if (!referral) return;
+    if (!referral) {
+      console.error('❌ Referral not found:', referralId);
+      return;
+    }
+
+    console.log('🔧 Adjusting referral bonus:', { referralId, oldAmount: referral.bonusAmount, newAmount: newBonusAmount });
 
     const oldAmount = referral.bonusAmount;
     const difference = newBonusAmount - oldAmount;
 
-    // Update referral record
+    // Update referral record in local state immediately for optimistic UI
     setReferralRecords(prev =>
       prev.map(r =>
         r.id === referralId
@@ -5181,75 +5263,127 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
       )
     );
 
-    // Update Supabase referral_records table
-    supabase
-      .from('referral_records')
-      .update({ bonus_amount: newBonusAmount })
-      .eq('id', referralId)
-      .then(result => {
-        if (result.error) {
-          console.error('Error updating referral bonus in Supabase:', result.error);
-        } else {
-          console.log('✅ Referral bonus updated in Supabase:', newBonusAmount);
-        }
-      });
+    try {
+      // Update Supabase referral_records table
+      const { data: refResult, error: refError } = await supabase
+        .from('referral_records')
+        .update({ bonus_amount: newBonusAmount })
+        .eq('id', referralId);
 
-    // Adjust referrer's balance by the difference
-    if (difference !== 0) {
-      const referrer = allUsers.find(u => u.id === referral.referrerId);
-      if (referrer) {
-        setAllUsers(prev =>
-          prev.map(u =>
-            u.id === referral.referrerId
-              ? {
-                  ...u,
-                  balance: (u.balance || 0) + difference,
-                  referralEarnings: (u.referralEarnings || 0) + difference
-                }
-                : u
-          )
-        );
-
-        // Update current user if they're the referrer
-        if (user && user.id === referral.referrerId) {
-          const newBal = (user.balance || 0) + difference;
-          setUser({
-            ...user,
-            balance: newBal,
-            referralEarnings: (user.referralEarnings || 0) + difference
-          });
-          setAccount(prev => ({ ...prev, balance: newBal }));
-        }
-
-        // Update Supabase referrer's balance
-        const newBalance = (referrer.balance || 0) + difference;
-        supabase
-          .from('user_balances')
-          .update({ balance: newBalance })
-          .eq('user_id', referrer.id)
-          .then(result => {
-            if (result.error) {
-              console.error('Error updating referrer balance in Supabase:', result.error);
-            } else {
-              console.log('✅ Referrer balance updated in Supabase:', newBalance);
-            }
-          });
-
-        // Update Supabase referrer's referral earnings
-        supabase
-          .from('user_profiles')
-          .update({
-            referral_earnings: (referrer.referralEarnings || 0) + difference
-          })
-          .eq('id', referrer.id)
-          .then(result => {
-            if (result.error) {
-              console.error('Error updating referrer earnings in Supabase:', result.error);
-            } else {
-              console.log('✅ Referrer earnings updated in Supabase');
-            }
-          });
+      if (refError) {
+        console.error('❌ Error updating referral bonus in Supabase:', refError);
+        return;
       }
+      console.log('✅ Referral bonus updated in Supabase:', newBonusAmount);
+
+      // Adjust referrer's balance by the difference
+      if (difference !== 0) {
+        const referrer = allUsers.find(u => u.id === referral.referrerId);
+        if (referrer) {
+          const newBalance = (referrer.balance || 0) + difference;
+          const newEarnings = (referrer.referralEarnings || 0) + difference;
+
+          // Update local state
+          setAllUsers(prev =>
+            prev.map(u =>
+              u.id === referral.referrerId
+                ? {
+                    ...u,
+                    balance: newBalance,
+                    referralEarnings: newEarnings
+                  }
+                : u
+            )
+          );
+
+          // Update current user if they're the referrer
+          if (user && user.id === referral.referrerId) {
+            setUser({
+              ...user,
+              balance: newBalance,
+              referralEarnings: newEarnings
+            });
+            setAccount(prev => ({ ...prev, balance: newBalance }));
+          }
+
+          // Update Supabase referrer's balance
+          const { error: balError } = await supabase
+            .from('user_balances')
+            .update({ balance: newBalance })
+            .eq('user_id', referrer.id);
+
+          if (balError) {
+            console.error('❌ Error updating referrer balance in Supabase:', balError);
+          } else {
+            console.log('✅ Referrer balance updated in Supabase:', newBalance);
+          }
+
+          // Update Supabase referrer's referral earnings
+          const { error: earningsError } = await supabase
+            .from('user_profiles')
+            .update({
+              referral_earnings: newEarnings
+            })
+            .eq('id', referrer.id);
+
+          if (earningsError) {
+            console.error('❌ Error updating referrer earnings in Supabase:', earningsError);
+          } else {
+            console.log('✅ Referrer earnings updated in Supabase:', newEarnings);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('❌ Unexpected error in adjustReferralBonus:', err);
+    }
+  };
+
+  const adjustReferrerEarnings = async (userId: string, newEarnings: number) => {
+    try {
+      const userToUpdate = allUsers.find(u => u.id === userId);
+      if (!userToUpdate) {
+        console.error('❌ Referrer user not found:', userId);
+        return;
+      }
+
+      const oldEarnings = userToUpdate.referralEarnings || 0;
+      const difference = newEarnings - oldEarnings;
+      const newBalance = (userToUpdate.balance || 0) + difference;
+
+      setAllUsers(prev =>
+        prev.map(u =>
+          u.id === userId
+            ? { ...u, referralEarnings: newEarnings, balance: newBalance }
+            : u
+        )
+      );
+
+      if (user && user.id === userId) {
+        setUser(prev => prev ? { ...prev, referralEarnings: newEarnings, balance: newBalance } : prev);
+        setAccount(prev => ({ ...prev, balance: newBalance }));
+      }
+
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({ referral_earnings: newEarnings })
+        .eq('id', userId);
+
+      if (profileError) {
+        console.error('❌ Error updating referrer earnings in Supabase:', profileError);
+      }
+
+      const { error: balanceError } = await supabase
+        .from('user_balances')
+        .update({ balance: newBalance })
+        .eq('user_id', userId);
+
+      if (balanceError) {
+        console.error('❌ Error updating referrer balance in Supabase:', balanceError);
+      }
+
+      console.log('✅ Referrer earnings and balance adjusted for', userId);
+    } catch (err) {
+      console.error('❌ Unexpected error in adjustReferrerEarnings:', err);
     }
   };
 
@@ -5356,6 +5490,7 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
         rejectReferral,
         manuallyAddReferral,
         adjustReferralBonus,
+        adjustReferrerEarnings,
         // Profile & Theme Management
         updateUserProfile,
         updatePassword,

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, X, Plus, Edit2, DollarSign } from 'lucide-react';
+import { Check, X, Plus, Edit2 } from 'lucide-react';
 import { useStore } from '../lib/store';
 
 export function ReferralManagementTab() {
@@ -23,6 +23,9 @@ export function ReferralManagementTab() {
   const pendingCount = referralRecords.filter(r => r.status === 'PENDING').length;
   const completedCount = referralRecords.filter(r => r.status === 'COMPLETED').length;
   const rejectedCount = referralRecords.filter(r => r.status === 'REJECTED').length;
+  const completedBonusTotal = referralRecords
+    .filter(r => r.status === 'COMPLETED')
+    .reduce((sum, r) => sum + (r.bonusAmount || 25), 0);
 
   const handleApprove = (referralId: string) => {
     approveReferral(referralId);
@@ -45,25 +48,28 @@ export function ReferralManagementTab() {
     alert('✅ Manual referral added and bonus credited!');
   };
 
-  const handleAdjustBonus = (referralId: string) => {
+  const handleAdjustBonus = async (referralId: string) => {
     if (!editAmount || isNaN(parseInt(editAmount))) {
       alert('❌ Please enter a valid amount');
       return;
     }
-    adjustReferralBonus(referralId, parseInt(editAmount));
-    setEditingId(null);
-    setEditAmount('');
-    alert('✅ Bonus adjusted!');
+    const newAmount = parseInt(editAmount);
+    console.log(`📝 Adjusting bonus for referral ${referralId} to $${newAmount}`);
+    
+    try {
+      await adjustReferralBonus(referralId, newAmount);
+      setEditingId(null);
+      setEditAmount('');
+      alert('✅ Bonus adjusted and synced to Supabase!');
+    } catch (error) {
+      console.error('❌ Error adjusting bonus:', error);
+      alert('❌ Failed to adjust bonus. Check console for details.');
+    }
   };
 
   const getReferrerName = (referrerId: string) => {
     const referrer = allUsers.find(u => u.id === referrerId);
     return referrer?.name || 'Unknown';
-  };
-
-  const getRefereeName = (userId: string) => {
-    const user = allUsers.find(u => u.id === userId);
-    return user?.name || 'Unknown';
   };
 
   return (
@@ -77,7 +83,7 @@ export function ReferralManagementTab() {
         <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
           <div className="text-xs text-green-600 dark:text-green-200 uppercase font-semibold">Completed</div>
           <div className="text-3xl font-bold text-green-700 dark:text-green-100">{completedCount}</div>
-          <div className="text-xs text-green-600 dark:text-green-300 mt-1">Total Bonus: ${completedCount * 25}</div>
+          <div className="text-xs text-green-600 dark:text-green-300 mt-1">Total Bonus: ${completedBonusTotal.toFixed(2)}</div>
         </div>
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
           <div className="text-xs text-red-600 dark:text-red-200 uppercase font-semibold">Rejected</div>
@@ -208,7 +214,9 @@ export function ReferralManagementTab() {
           <thead className="bg-gray-50 dark:bg-[#0d1117] border-b border-gray-300 dark:border-[#21262d]">
             <tr>
               <th className="px-4 py-3 text-left font-semibold text-gray-900 dark:text-white">Referrer</th>
-              <th className="px-4 py-3 text-center font-semibold text-gray-900 dark:text-white">Referrer Balance</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-900 dark:text-white">Referrals Made</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-900 dark:text-white">Total Earnings</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-900 dark:text-white">Current Balance</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-900 dark:text-white">User</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-900 dark:text-white">Email</th>
               <th className="px-4 py-3 text-center font-semibold text-gray-900 dark:text-white">Bonus</th>
@@ -219,7 +227,7 @@ export function ReferralManagementTab() {
           <tbody>
             {filteredReferrals.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-gray-600 dark:text-[#8b949e]">
+                <td colSpan={9} className="px-4 py-6 text-center text-gray-600 dark:text-[#8b949e]">
                   No referrals found
                 </td>
               </tr>
@@ -228,7 +236,17 @@ export function ReferralManagementTab() {
                 const referrer = allUsers.find(u => u.id === referral.referrerId);
                 return (
                   <tr key={referral.id} className="border-b border-gray-300 dark:border-[#21262d] hover:bg-gray-50 dark:hover:bg-[#0d1117]/50">
-                    <td className="px-4 py-3 text-gray-900 dark:text-white">{getReferrerName(referral.referrerId)}</td>
+                    <td className="px-4 py-3 text-gray-900 dark:text-white font-medium">{getReferrerName(referral.referrerId)}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs font-semibold">
+                        {referrer?.totalReferrals || 0}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded text-xs font-semibold">
+                        ${(referrer?.referralEarnings || 0).toFixed(2)}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-center font-semibold text-green-600 dark:text-green-400">
                       ${referrer?.balance?.toFixed(2) || '0.00'}
                     </td>

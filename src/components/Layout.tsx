@@ -1,4 +1,4 @@
-import React, { useState, Component } from 'react';
+import React, { useState, Component, useEffect } from 'react';
 import { useStore } from '../lib/store';
 import {
   LayoutDashboard,
@@ -15,6 +15,8 @@ import {
   Zap,
   Gift,
   Calendar,
+  Sun,
+  Moon
 } from
 'lucide-react';
 import { cn } from '../lib/utils';
@@ -24,8 +26,15 @@ interface LayoutProps {
   onNavigate: (page: string) => void;
 }
 export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
-  const { user, logout } = useStore();
+  const { user, logout, toggleTheme, theme } = useStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState(theme);
+
+  // Update currentTheme when store theme changes
+  useEffect(() => {
+    setCurrentTheme(theme);
+  }, [theme]);
+
   const allNavItems = [
     {
       id: 'dashboard',
@@ -95,6 +104,13 @@ export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
     onNavigate(id);
     setMobileMenuOpen(false);
   };
+
+  const handleToggleTheme = () => {
+    toggleTheme();
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    setCurrentTheme(newTheme);
+  };
+
   // Bottom Navigation Component
   const BottomNav = () =>
   <div className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-100 dark:bg-[#161b22] border-t border-gray-300 dark:border-[#21262d] z-40 flex justify-around items-center h-16 pb-safe">
@@ -225,7 +241,25 @@ export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
           </nav>
         </div>
 
-        <div className="mt-auto p-4 border-t border-gray-200 dark:border-[#21262d]">
+        <div className="mt-auto p-4 border-t border-gray-200 dark:border-[#21262d] space-y-2">
+          <button
+            onClick={handleToggleTheme}
+            className="w-full flex items-center justify-between px-3 py-2 rounded text-sm font-medium bg-gray-100 dark:bg-[#1c2128] text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-[#21262d] transition-colors">
+            <span className="flex items-center space-x-2">
+              {currentTheme === 'dark' ? (
+                <>
+                  <Sun className="h-4 w-4" />
+                  <span>Light</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="h-4 w-4" />
+                  <span>Dark</span>
+                </>
+              )}
+            </span>
+          </button>
+
           <button
             onClick={logout}
             className="w-full flex items-center space-x-3 px-3 py-2 rounded text-sm font-medium text-red-600 dark:text-[#ef5350] hover:bg-red-50 dark:hover:bg-[#ef5350]/10 transition-colors">

@@ -13,6 +13,34 @@ export function ReferralPage() {
   const userReferrals = referralRecords.filter(r => r.referrerId === user.id);
   const referralLink = `${window.location.origin}/auth/signup?ref=${user.referralCode}`;
 
+  // FALLBACK: If referralRecords is empty but user has stats, show user stats
+  const hasRecordsLoaded = userReferrals.length > 0;
+  const hasStatsInProfile = (user.totalReferrals || 0) > 0;
+  const usingFallbackData = !hasRecordsLoaded && hasStatsInProfile;
+  
+  const displayStats = usingFallbackData 
+    ? {
+        totalReferrals: user.totalReferrals || 0,
+        totalEarnings: user.referralEarnings || 0,
+        pendingEarnings: 0
+      }
+    : stats;
+
+  // Debug logging
+  React.useEffect(() => {
+    console.log('📄 Referral Page Loaded');
+    console.log('  User ID:', user.id);
+    console.log('  Referral Code:', user.referralCode);
+    console.log('  Total Referral Records from Store:', referralRecords.length);
+    console.log('  Referrals made by this user (filtered):', userReferrals.length);
+    console.log('  User stats from profile:', { totalReferrals: user.totalReferrals, referralEarnings: user.referralEarnings });
+    console.log('  Calculated stats from referralRecords:', stats);
+    console.log('  USING FALLBACK?', usingFallbackData);
+    if (usingFallbackData) {
+      console.log('  ⚠️  NOTE: Showing stats from user profile because referralRecords not fully loaded. This is their actual balance.');
+    }
+  }, [user.id, referralRecords, userReferrals, stats, usingFallbackData]);
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -33,6 +61,14 @@ export function ReferralPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {usingFallbackData && (
+          <div className="md:col-span-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <p className="text-sm text-blue-900 dark:text-blue-200">
+              ℹ️ Showing your earnings from your account profile. Detailed referral records are being loaded...
+            </p>
+          </div>
+        )}
+        
         <Card className="border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50">
           <CardHeader>
             <CardTitle className="text-sm text-gray-600 dark:text-gray-400">
@@ -41,7 +77,7 @@ export function ReferralPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-gray-900 dark:text-white">
-              {stats.totalReferrals}
+              {displayStats.totalReferrals}
             </div>
           </CardContent>
         </Card>
@@ -54,7 +90,7 @@ export function ReferralPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-green-600 dark:text-green-400">
-              ${stats.totalEarnings.toFixed(2)}
+              ${displayStats.totalEarnings.toFixed(2)}
             </div>
           </CardContent>
         </Card>
@@ -67,7 +103,7 @@ export function ReferralPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">
-              ${stats.pendingEarnings.toFixed(2)}
+              ${displayStats.pendingEarnings.toFixed(2)}
             </div>
           </CardContent>
         </Card>
@@ -128,14 +164,25 @@ export function ReferralPage() {
       {/* Referrals List */}
       <Card className="border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50">
         <CardHeader>
-          <CardTitle>Your Referrals ({userReferrals.length})</CardTitle>
+          <CardTitle>Your Referrals ({userReferrals.length > 0 ? userReferrals.length : displayStats.totalReferrals})</CardTitle>
         </CardHeader>
         <CardContent>
           {userReferrals.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-gray-600 dark:text-gray-400">
-                You haven't referred anyone yet. Share your code to get started!
-              </p>
+              {displayStats.totalReferrals > 0 ? (
+                <div className="space-y-3">
+                  <p className="text-gray-600 dark:text-gray-400">
+                    ✓ You have {displayStats.totalReferrals} successful referral{displayStats.totalReferrals !== 1 ? 's' : ''} earning you ${displayStats.totalEarnings.toFixed(2)}!
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-500">
+                    Detailed referral records are being loaded. Please refresh in a moment if records don't appear.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-gray-600 dark:text-gray-400">
+                  You haven't referred anyone yet. Share your code to get started!
+                </p>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">

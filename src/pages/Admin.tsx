@@ -19,7 +19,8 @@ import {
   Edit2,
   Bitcoin,
   Shield,
-  Gift
+  Gift,
+  Menu
 } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { BotManagementTabComponent } from '../components/BotManagementTab';
@@ -93,6 +94,7 @@ export function AdminPage() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [forms, setForms] = useState({
     addBalance: { userId: '', amount: '' },
     createBot: { userId: '', botName: '', allocatedAmount: '', performance: '', totalEarned: '' },
@@ -145,6 +147,7 @@ export function AdminPage() {
     { id: 'approvals', label: 'Approvals', icon: CheckCircle },
     { id: 'kyc', label: 'KYC Management', icon: Shield },
     { id: 'referrals', label: 'Referral Management', icon: Gift },
+    { id: 'referrers', label: 'Top Referrers', icon: Gift },
     { id: 'funded', label: 'Funded Accounts', icon: Zap },
     { id: 'transactions', label: 'Transactions', icon: DollarSign },
     { id: 'wallets-banks', label: 'Wallets & Banks', icon: CreditCard },
@@ -1245,6 +1248,229 @@ export function AdminPage() {
     </div>
   );
 
+  // Referrers Management Tab - Show users who have made referrals
+  const ReferrersTab = () => {
+    const { allUsers, adjustReferrerEarnings, referralRecords } = useStore();
+    const [editingEarnings, setEditingEarnings] = useState<string | null>(null);
+    const [editAmount, setEditAmount] = useState<string>('');
+
+    // Use the same data source as ReferralManagementTab - allUsers with referral data
+    const referrers = allUsers.filter(u => (u.totalReferrals || 0) > 0).sort((a, b) => (b.totalReferrals || 0) - (a.totalReferrals || 0));
+
+    useEffect(() => {
+      console.log('[ReferrersTab] referrers loaded:', referrers.length, 'items');
+      console.log(referrers);
+    }, [referrers]);
+
+    const handleAdjustEarnings = async (userId: string) => {
+      if (!editAmount || isNaN(parseInt(editAmount))) {
+        alert('❌ Please enter a valid amount');
+        return;
+      }
+      const newAmount = parseInt(editAmount);
+      console.log(`💰 Adjusting earnings for ${userId} to $${newAmount}`);
+
+      try {
+        await adjustReferrerEarnings(userId, newAmount);
+        setEditingEarnings(null);
+        setEditAmount('');
+        alert('✅ Referrer earnings adjusted successfully!');
+      } catch (error) {
+        console.error('❌ Error adjusting earnings:', error);
+        alert('❌ Failed to adjust earnings. Check console for details.');
+      }
+    };
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-[#161b22] border border-[#21262d] rounded-lg p-6 space-y-4">
+          <h3 className="text-lg font-bold text-white">Top Referrers</h3>
+
+          {referrers.length === 0 ? (
+            <div className="text-center py-12">
+              <Gift className="h-12 w-12 text-[#8b949e] mx-auto mb-4 opacity-50" />
+              <p className="text-[#8b949e]">No users have made referrals yet</p>
+              <p className="text-xs text-[#6e7681] mt-2">Users with referrals will appear here</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 border border-blue-500/30 rounded-lg p-4">
+                  <p className="text-xs text-blue-300 uppercase font-semibold mb-1">Total Referrers</p>
+                  <p className="text-3xl font-bold text-blue-100">{referrers.length}</p>
+                </div>
+                <div className="bg-gradient-to-br from-green-500/20 to-green-600/20 border border-green-500/30 rounded-lg p-4">
+                  <p className="text-xs text-green-300 uppercase font-semibold mb-1">Total Referrals Made</p>
+                  <p className="text-3xl font-bold text-green-100">{referrers.reduce((sum, u) => sum + (u.totalReferrals || 0), 0)}</p>
+                </div>
+                <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/20 border border-purple-500/30 rounded-lg p-4">
+                  <p className="text-xs text-purple-300 uppercase font-semibold mb-1">Total Earnings Paid</p>
+                  <p className="text-3xl font-bold text-purple-100">${referrers.reduce((sum, u) => sum + (u.referralEarnings || 0), 0).toFixed(2)}</p>
+                </div>
+                <div className="bg-gradient-to-br from-orange-500/20 to-orange-600/20 border border-orange-500/30 rounded-lg p-4">
+                  <p className="text-xs text-orange-300 uppercase font-semibold mb-1">Avg Balance</p>
+                  <p className="text-3xl font-bold text-orange-100">${(referrers.reduce((sum, u) => sum + (u.balance || 0), 0) / referrers.length).toFixed(0)}</p>
+                </div>
+              </div>
+
+              {/* Desktop: Table Layout */}
+              <div className="hidden md:block overflow-x-auto border border-[#21262d] rounded-lg">
+                <table className="w-full text-sm">
+                  <thead className="bg-[#0d1117] border-b border-[#21262d]">
+                    <tr>
+                      <th className="text-left py-3 px-4 text-[#8b949e] font-semibold">#</th>
+                      <th className="text-left py-3 px-4 text-[#8b949e] font-semibold">Name</th>
+                      <th className="text-left py-3 px-4 text-[#8b949e] font-semibold">Email</th>
+                      <th className="text-center py-3 px-4 text-[#8b949e] font-semibold">Referrals Made</th>
+                      <th className="text-center py-3 px-4 text-[#8b949e] font-semibold">Total Earnings</th>
+                      <th className="text-center py-3 px-4 text-[#8b949e] font-semibold">Current Balance</th>
+                      <th className="text-center py-3 px-4 text-[#8b949e] font-semibold">Country</th>
+                      <th className="text-center py-3 px-4 text-[#8b949e] font-semibold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {referrers.map((user, index) => (
+                      <tr key={user.id} className="border-b border-[#21262d] hover:bg-[#0d1117]/50 transition-colors">
+                        <td className="py-3 px-4 text-[#8b949e]">{index + 1}</td>
+                        <td className="py-3 px-4 text-white font-medium">{user.name}</td>
+                        <td className="py-3 px-4 text-[#8b949e]">{user.email}</td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-500/20 text-blue-300 rounded-full text-sm font-semibold">
+                            {user.totalReferrals || 0}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {editingEarnings === user.id ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={editAmount}
+                                onChange={(e) => setEditAmount(e.target.value)}
+                                className="w-20 px-2 py-1 bg-[#0d1117] border border-[#21262d] rounded text-white text-sm"
+                                placeholder="0.00"
+                              />
+                              <button
+                                onClick={() => handleAdjustEarnings(user.id)}
+                                className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingEarnings(null);
+                                  setEditAmount('');
+                                }}
+                                className="px-2 py-1 bg-gray-600 text-white text-xs rounded hover:bg-gray-700"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-500/20 text-purple-300 rounded-full text-sm font-semibold">
+                              ${(user.referralEarnings || 0).toFixed(2)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-500/20 text-green-300 rounded-full text-sm font-semibold">
+                            ${(user.balance || 0).toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center text-[#8b949e]">{user.country}</td>
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            onClick={() => {
+                              setEditingEarnings(user.id);
+                              setEditAmount((user.referralEarnings || 0).toString());
+                            }}
+                            className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition"
+                          >
+                            Adjust Earnings
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile: Card Layout */}
+              <div className="md:hidden space-y-3">
+                {referrers.map((user, index) => (
+                  <div key={user.id} className="bg-[#0d1117] border border-[#21262d] rounded-lg p-4 space-y-2">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <p className="font-semibold text-white">#{index + 1} {user.name}</p>
+                        <p className="text-xs text-[#8b949e]">{user.email}</p>
+                      </div>
+                      <span className="text-xs text-[#8b949e]">{user.country}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div className="bg-blue-500/20 rounded p-2 text-center">
+                        <p className="text-blue-300 font-semibold">{user.totalReferrals || 0}</p>
+                        <p className="text-[#8b949e] text-xs">Referrals</p>
+                      </div>
+                      <div className="bg-purple-500/20 rounded p-2 text-center">
+                        {editingEarnings === user.id ? (
+                          <div className="space-y-1">
+                            <input
+                              type="number"
+                              value={editAmount}
+                              onChange={(e) => setEditAmount(e.target.value)}
+                              className="w-full px-1 py-1 bg-[#161b22] border border-[#21262d] rounded text-white text-xs"
+                              placeholder="0.00"
+                            />
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => handleAdjustEarnings(user.id)}
+                                className="flex-1 px-1 py-1 bg-green-600 text-white text-xs rounded"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingEarnings(null);
+                                  setEditAmount('');
+                                }}
+                                className="flex-1 px-1 py-1 bg-gray-600 text-white text-xs rounded"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-purple-300 font-semibold">${(user.referralEarnings || 0).toFixed(0)}</p>
+                            <p className="text-[#8b949e] text-xs">Earnings</p>
+                          </>
+                        )}
+                      </div>
+                      <div className="bg-green-500/20 rounded p-2 text-center">
+                        <p className="text-green-300 font-semibold">${(user.balance || 0).toFixed(0)}</p>
+                        <p className="text-[#8b949e] text-xs">Balance</p>
+                      </div>
+                    </div>
+                    {editingEarnings !== user.id && (
+                      <button
+                        onClick={() => {
+                          setEditingEarnings(user.id);
+                          setEditAmount((user.referralEarnings || 0).toString());
+                        }}
+                        className="w-full mt-2 px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition"
+                      >
+                        Adjust Earnings
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // Manual subscription management tab
   const ManualTab = () => {
     const [form, setForm] = useState({
@@ -1553,6 +1779,8 @@ export function AdminPage() {
         );
       case 'referrals':
         return <ReferralManagementTab />;
+      case 'referrers':
+        return <ReferrersTab />;
       case 'funded':
         return <FundedAccountsTab />;
       case 'transactions':
@@ -1734,7 +1962,49 @@ export function AdminPage() {
       </div>
 
       {/* Tabs Navigation */}
-      <div className="flex flex-wrap gap-2 bg-[#161b22] border border-[#21262d] rounded-lg p-4 overflow-x-auto">
+      <div>
+        {/* Mobile: Hamburger Menu */}
+        <div className="md:hidden flex items-center gap-2 bg-[#161b22] border border-[#21262d] rounded-lg p-4 mb-4">
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium bg-[#2962ff] text-white hover:bg-[#1e47a0] transition-all"
+          >
+            <Menu className="h-5 w-5" />
+            Menu
+          </button>
+          <span className="text-[#8b949e] text-sm">
+            {tabs.find(tab => tab.id === activeTab)?.label || 'Dashboard'}
+          </span>
+        </div>
+
+        {/* Mobile: Dropdown Menu */}
+        {mobileMenuOpen && (
+          <div className="md:hidden grid grid-cols-2 gap-2 bg-[#161b22] border border-[#21262d] rounded-lg p-4 mb-4">
+            {tabs.map(tab => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-all text-sm ${
+                    activeTab === tab.id
+                      ? 'bg-[#2962ff] text-white'
+                      : 'bg-[#0d1117] text-[#8b949e] border border-[#21262d] hover:border-[#2962ff] hover:text-white'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span className="text-xs">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Desktop: Horizontal Tabs */}
+        <div className="hidden md:flex flex-wrap gap-2 bg-[#161b22] border border-[#21262d] rounded-lg p-4 overflow-x-auto">
         {tabs.map(tab => {
           const Icon = tab.icon;
           return (
@@ -1752,6 +2022,7 @@ export function AdminPage() {
             </button>
           );
         })}
+        </div>
       </div>
 
       {/* Tab Content */}
