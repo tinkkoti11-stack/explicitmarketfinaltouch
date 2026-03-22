@@ -180,8 +180,8 @@ interface StoreContextType {
   setBotDuration: (botPurchaseId: string, durationDays: number) => void;
   pauseBot: (botPurchaseId: string) => void;
   resumeBot: (botPurchaseId: string) => void;
-  terminateBot: (botPurchaseId: string) => void;
-  terminateSignal: (signalSubId: string) => void;
+  terminateBot: (botPurchaseId: string) => Promise<void>;
+  terminateSignal: (signalSubId: string) => Promise<void>;
   continueSignalTrading: (signalSubId: string) => void;
   // Copy Trading Methods
   followTrader: (trader: any, allocation: number, durationValue: string, durationType: 'minutes' | 'hours' | 'days') => void;
@@ -1325,6 +1325,13 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
                 .eq('user_id', u.id)
                 .single();
               
+              // Load KYC data from kyc_verifications table
+              const { data: kycData } = await supabase
+                .from('kyc_verifications')
+                .select('first_name, last_name, date_of_birth, country, state, city, zip_code, address, document_type')
+                .eq('user_id', u.id)
+                .single();
+              
               return {
                 id: u.id,
                 email: u.email,
@@ -1340,7 +1347,18 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
                 referralEarnings: u.referral_earnings || 0,
                 totalReferrals: u.total_referrals || 0,
                 referredBy: u.referred_by,
-                kycStatus: u.kyc_status || 'PENDING'
+                kycStatus: u.kyc_status || 'PENDING',
+                kycData: kycData ? {
+                  firstName: kycData.first_name,
+                  lastName: kycData.last_name,
+                  dateOfBirth: kycData.date_of_birth,
+                  country: kycData.country,
+                  state: kycData.state,
+                  city: kycData.city,
+                  zipCode: kycData.zip_code,
+                  address: kycData.address,
+                  documentType: kycData.document_type
+                } : undefined
               };
             })
           );
@@ -1754,6 +1772,34 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
         } else {
           console.log('ℹ️ No recent trades found for user');
           setRecentTrades([]);
+        }
+
+        // 8. Load user KYC data
+        console.log('Loading user KYC data...');
+        const { data: kycData } = await supabase
+          .from('kyc_verifications')
+          .select('first_name, last_name, date_of_birth, country, state, city, zip_code, address, document_type, status, submitted_at')
+          .eq('user_id', userId)
+          .single();
+
+        if (kycData) {
+          console.log('✅ Loaded KYC data for user');
+          const convertedKycData = {
+            firstName: kycData.first_name,
+            lastName: kycData.last_name,
+            dateOfBirth: kycData.date_of_birth,
+            country: kycData.country,
+            state: kycData.state,
+            city: kycData.city,
+            zipCode: kycData.zip_code,
+            address: kycData.address,
+            documentType: kycData.document_type,
+            status: kycData.status,
+            submittedAt: kycData.submitted_at
+          };
+          setUser(prev => prev ? { ...prev, kycData: convertedKycData } : null);
+        } else {
+          console.log('ℹ️ No KYC data found for user');
         }
       }
 
@@ -2315,7 +2361,32 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
       const supabaseUserId = userProfile.id;
       console.log('📍 Syncing KYC to Supabase for user:', supabaseUserId);
 
-      // Insert KYC record into user_profiles
+      // First, upsert KYC verification record with all personal details
+      const { error: kycError } = await supabase
+        .from('kyc_verifications')
+        .upsert({
+          user_id: supabaseUserId,
+          first_name: data.firstName,
+          last_name: data.lastName,
+          date_of_birth: data.dateOfBirth,
+          country: data.country,
+          state: data.state,
+          city: data.city,
+          zip_code: data.zipCode,
+          address: data.address,
+          document_type: data.documentType,
+          status: 'PENDING',
+          submitted_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+
+      if (kycError) {
+        console.error('❌ Error saving KYC data to kyc_verifications:', kycError.message);
+        return;
+      }
+
+      console.log('✅ KYC data saved to kyc_verifications table');
+
+      // Then update kyc_status in user_profiles
       const { error: updateError } = await supabase
         .from('user_profiles')
         .update({
@@ -2324,11 +2395,11 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
         .eq('id', supabaseUserId);
 
       if (updateError) {
-        console.error('❌ Error syncing KYC to Supabase:', updateError.message);
+        console.error('❌ Error syncing KYC status to user_profiles:', updateError.message);
         return;
       }
 
-      console.log('✅ KYC submitted and synced to Supabase');
+      console.log('✅ KYC status updated in user_profiles');
     } catch (err: any) {
       console.error('❌ Error in submitKYC:', err.message);
     }
@@ -2894,13 +2965,28 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
     alert(`✅ Allocated $${amount.toFixed(2)} to bot. This will be deducted when admin activates.`);
   };
 
-  const terminateBot = (botPurchaseId: string) => {
+  const terminateBot = async (botPurchaseId: string) => {
     const bot = purchasedBots.find((b) => b.id === botPurchaseId);
     if (!bot) return;
     
     // credit back net funds: allocation + totalEarned - totalLost
     const netRefund = bot.allocatedAmount + bot.totalEarned - bot.totalLost;
     
+    // Update Supabase first
+    const { error: updateError } = await supabase
+      .from('user_bots')
+      .update({ status: 'CLOSED' })
+      .eq('id', botPurchaseId);
+
+    if (updateError) {
+      console.error('❌ Error updating bot status in Supabase:', updateError.message);
+      alert('Failed to terminate bot. Please try again.');
+      return;
+    }
+
+    console.log(`✅ Bot ${botPurchaseId} status updated to CLOSED in Supabase`);
+    
+    // Update local state
     setPurchasedBots((prev) =>
       prev.map((b) =>
         b.id === botPurchaseId ? { ...b, status: 'CLOSED' } : b
@@ -2922,7 +3008,7 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
         setAccount((prev) => ({ ...prev, balance: newBal }));
         
         // Sync balance to Supabase for cross-device sync
-        syncUserBalance(user.id, newBal);
+        await syncUserBalance(user.id, newBal);
       }
     }
     alert(
@@ -2930,13 +3016,28 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
     );
   };
 
-  const terminateSignal = (signalSubId: string) => {
+  const terminateSignal = async (signalSubId: string) => {
     const signal = purchasedSignals.find((s) => s.id === signalSubId);
     if (!signal) return;
     
     // credit back: allocation + totalEarningsRealized
     const totalRefund = signal.allocation + signal.totalEarningsRealized;
     
+    // Update Supabase first
+    const { error: updateError } = await supabase
+      .from('user_signals')
+      .update({ status: 'CLOSED', active_trades: [] })
+      .eq('id', signalSubId);
+
+    if (updateError) {
+      console.error('❌ Error updating signal status in Supabase:', updateError.message);
+      alert('Failed to terminate signal. Please try again.');
+      return;
+    }
+
+    console.log(`✅ Signal ${signalSubId} status updated to CLOSED in Supabase`);
+    
+    // Update local state
     setPurchasedSignals((prev) =>
       prev.map((sig) =>
         sig.id === signalSubId ? { ...sig, status: 'CLOSED', activeTrades: [] } : sig
@@ -2957,7 +3058,7 @@ export function StoreProvider({ children }: {children: React.ReactNode;}) {
         setAccount((prev) => ({ ...prev, balance: newBal }));
         
         // Sync balance to Supabase for cross-device sync
-        syncUserBalance(user.id, newBal);
+        await syncUserBalance(user.id, newBal);
       }
     }
     alert(
