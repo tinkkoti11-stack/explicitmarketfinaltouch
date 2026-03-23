@@ -15,6 +15,10 @@ import { FundedAccountsPage } from './pages/FundedAccounts';
 import { ReferralPage } from './pages/Referral';
 import { AdminPage } from './pages/Admin';
 import { HistoryPage } from './pages/History';
+import { Broker } from './pages/Broker';
+import { About } from './pages/About';
+import { Contact } from './pages/Contact';
+import { TermsAndConditions } from './pages/TermsAndConditions';
 import { Layout } from './components/Layout';
 import { LockedPageMessage } from './components/LockedPageMessage';
 function AppContent() {
@@ -37,6 +41,12 @@ function AppContent() {
   React.useEffect(() => {
     // This effect just needs to depend on theme to cause re-renders
   }, [theme]);
+
+  // Check for public pages (accessible to everyone)
+  if (pathname === '/broker') return <Broker />;
+  if (pathname === '/about') return <About />;
+  if (pathname === '/contact') return <Contact />;
+  if (pathname === '/terms') return <TermsAndConditions />;
 
   // Not authenticated - show landing, login, or signup
   if (!isAuthenticated) {
